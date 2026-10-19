@@ -93,7 +93,7 @@
   function priceCheck(l, others) {
     const own = pricePerSqm(l);
     if (own == null) return null;
-    const pool = (others || []).filter(o => o !== l && o.id !== l.id && o.mode === l.mode && !o.gone);
+    const pool = (others || []).filter(o => o !== l && (l.id == null || o.id !== l.id) && o.mode === l.mode && !o.gone);
     const median = vals => { const v = vals.sort((a, b) => a - b), m = v.length >> 1; return v.length % 2 ? v[m] : (v[m - 1] + v[m]) / 2; };
     const tries = [["postcode", o => l.postcode && o.postcode === l.postcode], ["city", o => cityKey(l) && cityKey(o) === cityKey(l)]];
     for (const [level, same] of tries) {
@@ -106,12 +106,12 @@
   // Area rating 0–10 from the area facts (phase 3), shown in the rating tooltip:
   //   everyday = 10 × mean over six groups of walking points (≤ 5 min 1, ≤ 10 min 0.75, ≤ 15 min 0.5, ≤ 20 min 0.25, else or none 0);
   //     groups: transit stop, supermarket, pharmacy, doctor, kindergarten or school, park or playground.
-  //   minus flood (HQhäufig 3, HQ100 2, only HQextrem 0.5), noise Lden (≥ 70 dB 2, ≥ 65 1.5, ≥ 60 1, ≥ 55 0.5),
+  //   minus flood (HQhäufig 3, HQ100 2, only HQextrem or a mapped area of unstated class 0.5), noise Lden (≥ 70 dB 2, ≥ 65 1.5, ≥ 60 1, ≥ 55 0.5),
   //   crime in the Kreis vs the national rate (≥ 1.5 × 1, ≥ 1.2 × 0.5). Figures with no data or an error count 0.
   //   value = round(everyday − deductions), clamped to 0–10. Null until the amenities are known.
   const AREA_GROUPS = [["transit"], ["supermarket"], ["pharmacy"], ["doctors"], ["kindergarten", "school"], ["park", "playground"]];
   const walkPoints = m => m == null ? 0 : m <= 5 ? 1 : m <= 10 ? 0.75 : m <= 15 ? 0.5 : m <= 20 ? 0.25 : 0;
-  const FLOOD_DEDUCT = { high: 3, medium: 2, low: 0.5 };
+  const FLOOD_DEDUCT = { high: 3, medium: 2, low: 0.5, unknown: 0.5 }; // unknown = inside a mapped flood area, class not stated: scored like the extreme scenario
   function areaRating(area) {
     const am = area && area.amenities;
     if (!am || am.status !== "ok" || !am.items) return null;
@@ -123,7 +123,7 @@
     const everyday = Math.round(groups.reduce((s, g) => s + g.points, 0) / groups.length * 100) / 10;
     const parts = [{ key: "everyday", value: everyday, groups }];
     const fl = area.flood, no = area.noise, cr = area.crime;
-    if (fl && fl.status === "ok" && FLOOD_DEDUCT[fl.worst]) parts.push({ key: "flood", value: -FLOOD_DEDUCT[fl.worst], worst: fl.worst });
+    if (fl && fl.status === "ok" && Object.hasOwn(FLOOD_DEDUCT, fl.worst)) parts.push({ key: "flood", value: -FLOOD_DEDUCT[fl.worst], worst: fl.worst });
     if (no && no.status === "ok" && no.max != null) { const d = no.max >= 70 ? 2 : no.max >= 65 ? 1.5 : no.max >= 60 ? 1 : no.max >= 55 ? 0.5 : 0; if (d) parts.push({ key: "noise", value: -d, max: no.max }); }
     const ratio = cr && cr.status === "ok" && cr.ratio ? cr.ratio.total : null;
     if (ratio != null) { const d = ratio >= 1.5 ? 1 : ratio >= 1.2 ? 0.5 : 0; if (d) parts.push({ key: "crime", value: -d, ratio }); }

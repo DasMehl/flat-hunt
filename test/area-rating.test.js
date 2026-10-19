@@ -48,3 +48,25 @@ test("priceCheck compares price per m² with the same postcode first, else the s
   assert.equal(C.priceCheck(l, [l, mk("a", 500, "40210")]), null);
   assert.equal(C.priceCheck({ mode: "rent", coldRent: 700 }, others), null);
 });
+
+test("flood zone of unstated class counts like the extreme scenario; prototype keys are ignored", () => {
+  const all = { amenities: amenities({ doctors: item(5), kindergarten: item(5), playground: item(5) }) };
+  const r = C.areaRating({ ...all, flood: { status: "ok", worst: "unknown" } });
+  assert.deepEqual(r.parts.filter(p => p.key === "flood"), [{ key: "flood", value: -0.5, worst: "unknown" }]);
+  assert.equal(r.value, 10, "10 − 0.5 = 9.5 rounds to 10");
+  assert.equal(C.areaRating({ ...all, flood: { status: "ok", worst: "constructor" } }).parts.length, 1);
+});
+
+test("priceCheck without ids excludes the listing itself by identity only", () => {
+  const mk = (coldRent, postcode) => ({ mode: "rent", coldRent, size: 50, postcode, city: "Düsseldorf" });
+  const l = mk(750, "40210"), others = [l, mk(500, "40210"), mk(600, "40210"), mk(700, "40210")];
+  const r = C.priceCheck(l, others);
+  assert.deepEqual([r.level, r.n, r.median], ["postcode", 3, 12]);
+});
+
+test("estimated walking minutes score like routed ones (estimates already include a detour factor)", () => {
+  const est = m => ({ ...item(m), estimated: true });
+  const a = C.areaRating({ amenities: amenities({ transit: est(3), supermarket: est(12) }) });
+  const b = C.areaRating({ amenities: amenities({ transit: item(3), supermarket: item(12) }) });
+  assert.deepEqual(a.parts[0], b.parts[0]);
+});

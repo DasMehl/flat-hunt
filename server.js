@@ -5,7 +5,8 @@ const path = require("path");
 const crypto = require("crypto");
 const { readJson, writeJsonAtomic } = require("./lib/store");
 const { validateProfile } = require("./lib/profile");
-const { geocode, drive } = require("./lib/geo");
+const { geocode } = require("./lib/geo");
+const { commuteFor } = require("./lib/commute");
 
 const STATUSES = ["new", "contacted", "viewing-invited", "viewing-done", "applied", "docs-requested", "accepted", "rejected", "dropped", "gone"];
 const LISTING_FIELDS = ["title", "shortName", "displayTitle", "make", "model", "fuel", "engine", "facelift", "variant", "trim", "colour", "price", "negotiable", "km", "regMonth", "regYear", "hp", "gearbox", "dsgType", "hu", "owners", "serviceHistory", "timingBelt", "dsgOil", "docsReview", "carplay", "carplayStatus", "camera", "location", "city", "distanceKm", "airKm", "roadKm", "driveMin", "transitMin", "transitCheckedAt", "transitSource", "transitDestination", "transitApproximate", "lat", "lon", "bahnUrl", "mapsUrl", "sellerName", "sellerType", "phone", "url", "kleinanzeigenUrl", "photos", "verdict", "pros", "cons", "questions", "i18n", "equip", "score", "rating", "replyAssessment", "visit", "order", "addedAt", "lastSeenAt", "priceHistory", "gone", "source"];
@@ -15,6 +16,8 @@ const today = () => new Date().toISOString().slice(0, 10);
 
 function createApp(options = {}) {
   const dataDir = options.dataDir || process.env.DATA_DIR || path.join(__dirname, "data");
+  const pauseMs = options.pauseMs ?? 1000;
+  const sleep = ms => ms > 0 ? new Promise(r => setTimeout(r, ms)) : Promise.resolve();
   const password = options.password ?? process.env.SITE_PASSWORD ?? "";
   const syncKey = options.syncKey ?? process.env.SYNC_KEY ?? "";
   const seedFile = options.seedFile || path.join(__dirname, "seed.json");
@@ -75,6 +78,36 @@ function createApp(options = {}) {
   app.locals.requireKey = requireKey;
 
   app.get("/api/listings", (req, res) => res.json({ listings: state.listings, updatedAt: new Date().toISOString() }));
+
+  // Registered before every /api/listings/:id route so it is never read as an id.
+  app.post("/api/listings/recalc-commute", async (req, res) => {
+    const places = (state.profile && state.profile.places) || [];
+    const results = new Map();
+    let first = true;
+    for (const [id, c] of Object.entries(state.listings)) {
+      if (typeof c.lat !== "number" || typeof c.lon !== "number") continue;
+      if (places.length) { if (!first) await sleep(pauseMs); first = false; }
+      results.set(id, await commuteFor({ lat: c.lat, lon: c.lon }, places, app.locals.fetchImpl, { pauseMs }));
+    }
+    // Applied without awaiting, so a concurrent edit or delete cannot interleave.
+    const before = [];
+    for (const [id, c] of Object.entries(state.listings)) {
+      before.push([c, c.commute, c.commuteStale]);
+      if (results.has(id)) c.commute = results.get(id);
+      else if (c.commute !== undefined) c.commute = places.map(() => null);
+      delete c.commuteStale;
+    }
+    try { await persist(); }
+    catch (e) {
+      for (const [c, commute, stale] of before) {
+        if (commute === undefined) delete c.commute; else c.commute = commute;
+        if (stale === undefined) delete c.commuteStale; else c.commuteStale = stale;
+      }
+      return res.status(500).json({ error: "save failed" });
+    }
+    res.json({ ok: true, updated: results.size });
+  });
+
   app.get("/api/meta", (req, res) => res.json(state.meta));
 
   app.get("/api/profile", (req, res) => state.profile ? res.json(state.profile) : res.status(404).json({ error: "no profile" }));
@@ -82,9 +115,19 @@ function createApp(options = {}) {
   app.put("/api/profile", async (req, res) => {
     const { errors, value } = validateProfile(req.body);
     if (errors.length) return res.status(400).json({ error: "invalid profile", details: errors });
+    const prev = state.profile, flagged = [];
+    const placesChanged = JSON.stringify((prev && prev.places) || []) !== JSON.stringify(value.places);
+    if (placesChanged) for (const c of Object.values(state.listings)) if (!c.commuteStale) { c.commuteStale = true; flagged.push(c); }
     state.profile = value;
-    try { await writeJsonAtomic(files.profile, value); res.json({ ok: true, profile: value }); }
-    catch (e) { res.status(500).json({ error: "save failed" }); }
+    try {
+      if (flagged.length) await persist();
+      await writeJsonAtomic(files.profile, value);
+      res.json({ ok: true, profile: value });
+    } catch (e) {
+      state.profile = prev;
+      for (const c of flagged) delete c.commuteStale;
+      res.status(500).json({ error: "save failed" });
+    }
   });
 
   // Validates listing facts as the add-listing dialog sends them. With partial, every field is optional
@@ -102,22 +145,18 @@ function createApp(options = {}) {
     return errors;
   }
 
-  // Coordinates, drive from home and route link for a town; fields stay absent when lookup fails.
+  // Coordinates, commute to each of the profile's places and a route link for a town; fields stay absent when lookup fails.
   async function locate(town) {
     const out = {};
     try {
       const where = await geocode(town, app.locals.fetchImpl);
       if (where) {
         out.lat = where.lat; out.lon = where.lon;
-        const centre = state.profile && state.profile.radius && state.profile.radius.center;
-        const home = centre ? { label: centre.address, lat: centre.lat, lon: centre.lon } : null;
-        if (home) {
-          const r = await drive(home, where, app.locals.fetchImpl);
-          if (r) Object.assign(out, r);
-          out.mapsUrl = "https://www.google.com/maps/dir/?api=1&origin=" + encodeURIComponent(home.label) + `&destination=${where.lat},${where.lon}`;
-        }
+        const places = (state.profile && state.profile.places) || [];
+        out.commute = await commuteFor(where, places, app.locals.fetchImpl);
+        if (places.length) out.mapsUrl = "https://www.google.com/maps/dir/?api=1&origin=" + encodeURIComponent(places[0].address) + `&destination=${where.lat},${where.lon}`;
       }
-    } catch (e) { /* distance stays empty */ }
+    } catch (e) { /* commute stays empty */ }
     return out;
   }
 
@@ -185,7 +224,7 @@ function createApp(options = {}) {
 
   const EDITABLE = ["url", "title", "price", "km", "regYear", "regMonth", "hp", "fuel", "gearbox", "town", "negotiable"];
   // Fields that describe where the listing is; a new town makes all of them stale.
-  const PLACE_FIELDS = ["lat", "lon", "roadKm", "driveMin", "mapsUrl", "distanceKm", "airKm", "transitMin", "transitCheckedAt", "transitSource", "transitDestination", "transitApproximate", "bahnUrl"];
+  const PLACE_FIELDS = ["lat", "lon", "roadKm", "driveMin", "commute", "commuteStale", "mapsUrl", "distanceKm", "airKm", "transitMin", "transitCheckedAt", "transitSource", "transitDestination", "transitApproximate", "bahnUrl"];
 
   app.patch("/api/listings/:id/listing", async (req, res) => {
     const id = req.params.id, p = req.body;

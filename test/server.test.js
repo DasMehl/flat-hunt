@@ -109,7 +109,7 @@ test("photos upload to DATA_DIR/img and are served from /img", async () => {
 
 const geoFetch = async url => ({ ok: true, status: 200, json: async () => url.includes("nominatim") ? [{ display_name: "45127 Essen", lat: "51.4556", lon: "7.0116" }] : { routes: [{ distance: 36000, duration: 1920 }] } });
 const failFetch = async () => { throw new Error("offline"); };
-const homeProfile = () => { const p = defaultProfile(); p.radius = { center: { address: "Königsallee 1, 40212 Düsseldorf", lat: 51.2254, lon: 6.7787 }, km: 50 }; return p; };
+const homeProfile = () => { const p = defaultProfile(); p.places = [{ label: "Büro", address: "Königsallee 1, 40212 Düsseldorf", lat: 51.2254, lon: 6.7787, mode: "car", maxMin: 45, time: "08:00" }]; return p; };
 const newCar = { url: "https://suchen.mobile.de/fahrzeuge/details.html?id=123", title: "VW Golf 7 Variant 2.0 TDI", price: 9900, km: 150000, regYear: 2016, fuel: "diesel", gearbox: "automatic", town: "45127 Essen" };
 
 test("manual add geocodes the town and computes the drive", async () => {
@@ -120,8 +120,10 @@ test("manual add geocodes the town and computes the drive", async () => {
     assert.equal(r.status, 201);
     const { id, listing: car } = await r.json();
     assert.equal(id, "vw-golf-7-variant-2-0-tdi-45127-essen");
-    assert.equal(car.driveMin, 32);
-    assert.equal(car.roadKm, 36);
+    assert.equal(car.commute.length, 1);
+    assert.equal(car.commute[0].minutes, 32);
+    assert.match(car.commute[0].checkedAt, /^\d{4}-\d\d-\d\dT/);
+    assert.match(car.mapsUrl, /origin=.*destination=51\.4556,7\.0116$/);
     assert.equal(car.status, "new");
     const again = await (await fetch(s.base + "/api/listings", { method: "POST", headers: json(s.auth), body: JSON.stringify(newCar) })).json();
     assert.equal(again.id, id + "-2");
@@ -134,7 +136,7 @@ test("manual add still saves when geocoding fails, and validates input", async (
     await fetch(s.base + "/api/profile", { method: "PUT", headers: json(s.auth), body: JSON.stringify(homeProfile()) });
     const r = await fetch(s.base + "/api/listings", { method: "POST", headers: json(s.auth), body: JSON.stringify(newCar) });
     assert.equal(r.status, 201);
-    assert.equal((await r.json()).listing.driveMin, undefined);
+    assert.equal((await r.json()).listing.commute, undefined);
     const bad = await fetch(s.base + "/api/listings", { method: "POST", headers: json(s.auth), body: JSON.stringify({ ...newCar, price: "cheap", url: "javascript:alert(1)" }) });
     assert.equal(bad.status, 400);
     assert.equal((await bad.json()).details.length, 2);
@@ -336,7 +338,7 @@ test("editing the town re-geocodes and recomputes the drive", async () => {
   try {
     await fetch(s.base + "/api/profile", { method: "PUT", headers: json(s.auth), body: JSON.stringify(homeProfile()) });
     const { id, listing: before } = await addManual(s);
-    assert.equal(before.driveMin, 32);
+    assert.equal(before.commute[0].minutes, 32);
     await fetch(s.base + "/api/listings/" + id, { method: "PUT", headers: s.sync, body: JSON.stringify({ transitMin: 50, transitCheckedAt: "2026-10-18" }) });
     impl = otherTownFetch;
     const { listing: car } = await (await editListing(s, id, { town: "50667 Köln" })).json();
@@ -344,8 +346,7 @@ test("editing the town re-geocodes and recomputes the drive", async () => {
     assert.equal(car.city, "50667 Köln");
     assert.equal(car.lat, 50.9384);
     assert.equal(car.lon, 6.9599);
-    assert.equal(car.roadKm, 41);
-    assert.equal(car.driveMin, 45);
+    assert.equal(car.commute[0].minutes, 45);
     assert.match(car.mapsUrl, /destination=50\.9384,6\.9599$/);
     assert.equal(car.transitMin, undefined);
     assert.equal(car.transitCheckedAt, undefined);
@@ -364,7 +365,7 @@ test("editing the town when geocoding fails keeps the town and clears the old di
     const { listing: car } = await r.json();
     assert.equal(car.location, "Nowhere");
     assert.equal(car.city, "Nowhere");
-    for (const k of ["lat", "lon", "roadKm", "driveMin", "mapsUrl", "transitMin", "transitCheckedAt"]) assert.equal(car[k], undefined, k);
+    for (const k of ["lat", "lon", "commute", "mapsUrl", "transitMin", "transitCheckedAt"]) assert.equal(car[k], undefined, k);
   } finally { await s.close(); }
 });
 
@@ -442,5 +443,84 @@ test("a failed delete answers 500 and restores the car and its log entries", asy
     const meta = await (await fetch(s.base + "/api/meta", { headers: s.auth })).json();
     assert.equal(meta.log.filter(e => e.id === id).length, 1);
     assert.ok(fs.existsSync(path.join(s.dir, "img", id + "-1.jpg")));
+  } finally { await s.close(); }
+});
+
+test("without places a new listing gets an empty commute and no route link", async () => {
+  const s = await start({ fetchImpl: geoFetch });
+  try {
+    const { listing: car } = await addManual(s);
+    assert.deepEqual(car.commute, []);
+    assert.equal(car.mapsUrl, undefined);
+    assert.equal(car.lat, 51.4556);
+  } finally { await s.close(); }
+});
+
+test("a transit place is looked up with its own time and a failed lookup is null", async () => {
+  const seen = [];
+  const f = async url => { seen.push(url); return url.includes("nominatim") ? geoFetch(url) : { ok: false, status: 500, json: async () => ({}) }; };
+  const s = await start({ fetchImpl: f });
+  try {
+    const p = homeProfile(); p.places[0].mode = "transit"; p.places[0].time = "07:30";
+    await fetch(s.base + "/api/profile", { method: "PUT", headers: json(s.auth), body: JSON.stringify(p) });
+    const { listing: car } = await addManual(s);
+    assert.deepEqual(car.commute, [null]);
+    assert.ok(seen.some(u => u.startsWith("https://api.transitous.org/api/v1/plan?fromPlace=51.4556,7.0116&toPlace=51.2254,6.7787&time=") && u.endsWith("&arriveBy=true")));
+  } finally { await s.close(); }
+});
+
+test("changing the places marks every listing stale, other profile edits do not", async () => {
+  const s = await start({ fetchImpl: geoFetch });
+  try {
+    await fetch(s.base + "/api/profile", { method: "PUT", headers: json(s.auth), body: JSON.stringify(homeProfile()) });
+    const { id } = await addManual(s);
+    const list = async () => (await (await fetch(s.base + "/api/listings", { headers: s.auth })).json()).listings[id];
+    const p = homeProfile(); p.name = "Renamed";
+    await fetch(s.base + "/api/profile", { method: "PUT", headers: json(s.auth), body: JSON.stringify(p) });
+    assert.equal((await list()).commuteStale, undefined);
+    p.places[0].maxMin = 30;
+    assert.equal((await fetch(s.base + "/api/profile", { method: "PUT", headers: json(s.auth), body: JSON.stringify(p) })).status, 200);
+    assert.equal((await list()).commuteStale, true);
+    const onDisk = JSON.parse(fs.readFileSync(path.join(s.dir, "listings.json"), "utf8"));
+    assert.equal(onDisk[id].commuteStale, true);
+  } finally { await s.close(); }
+});
+
+test("recalc-commute is password only, recomputes every listing and clears the stale flag", async () => {
+  const s = await start({ fetchImpl: geoFetch, pauseMs: 0 });
+  try {
+    const { id } = await addManual(s);
+    assert.equal((await fetch(s.base + "/api/listings/recalc-commute", { method: "POST" })).status, 401);
+    const p = homeProfile();
+    await fetch(s.base + "/api/profile", { method: "PUT", headers: json(s.auth), body: JSON.stringify(p) });
+    const r = await fetch(s.base + "/api/listings/recalc-commute", { method: "POST", headers: s.auth });
+    assert.equal(r.status, 200);
+    assert.deepEqual(await r.json(), { ok: true, updated: 1 });
+    const car = (await (await fetch(s.base + "/api/listings", { headers: s.auth })).json()).listings[id];
+    assert.equal(car.commuteStale, undefined);
+    assert.equal(car.commute.length, 1);
+    assert.equal(car.commute[0].minutes, 32);
+    // the sync key alone does not open it
+    assert.equal((await fetch(s.base + "/api/listings/recalc-commute", { method: "POST", headers: { "x-sync-key": "key" } })).status, 401);
+  } finally { await s.close(); }
+});
+
+test("recalc-commute skips listings without coordinates and answers 500 when saving fails", async () => {
+  const s = await start({ fetchImpl: geoFetch, pauseMs: 0 });
+  try {
+    await fetch(s.base + "/api/profile", { method: "PUT", headers: json(s.auth), body: JSON.stringify(homeProfile()) });
+    const { id } = await addManual(s);
+    await fetch(s.base + "/api/listings/nolocation", { method: "PUT", headers: s.sync, body: JSON.stringify({ title: "No coords" }) });
+    const ok = await (await fetch(s.base + "/api/listings/recalc-commute", { method: "POST", headers: s.auth })).json();
+    assert.equal(ok.updated, 1);
+    const p = homeProfile(); p.places[0].maxMin = 20;
+    await fetch(s.base + "/api/profile", { method: "PUT", headers: json(s.auth), body: JSON.stringify(p) });
+    fs.rmSync(path.join(s.dir, "listings.json"));
+    fs.mkdirSync(path.join(s.dir, "listings.json"));
+    const r = await fetch(s.base + "/api/listings/recalc-commute", { method: "POST", headers: s.auth });
+    assert.equal(r.status, 500);
+    assert.deepEqual(await r.json(), { error: "save failed" });
+    const cars = (await (await fetch(s.base + "/api/listings", { headers: s.auth })).json()).listings;
+    assert.equal(cars[id].commuteStale, true);
   } finally { await s.close(); }
 });

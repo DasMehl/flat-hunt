@@ -26,7 +26,7 @@ test("a fresh copy starts empty; the seed is applied only with SEED=1", async ()
   finally { await a.close(); }
   process.env.SEED = "1";
   const b = await start({ seedFile });
-  try { assert.ok((await (await fetch(b.base + "/api/listings", { headers: b.auth })).json()).listings["example-car"]); }
+  try { assert.ok((await (await fetch(b.base + "/api/listings", { headers: b.auth })).json()).listings["example-flat"]); }
   finally { await b.close(); delete process.env.SEED; }
 });
 
@@ -152,7 +152,7 @@ test("geocode endpoint", async () => {
   } finally { await s.close(); }
 });
 
-test("concurrent manual adds of the same car get different ids", async () => {
+test("concurrent manual adds of the same listing get different ids", async () => {
   const slowGeo = async url => { await new Promise(r => setTimeout(r, 50)); return geoFetch(url); };
   const s = await start({ fetchImpl: slowGeo });
   try {
@@ -169,7 +169,7 @@ test("concurrent manual adds of the same car get different ids", async () => {
   } finally { await s.close(); }
 });
 
-test("a failed manual-add save answers 500 and leaves no car or log entry behind", async () => {
+test("a failed manual-add save answers 500 and leaves no listing or log entry behind", async () => {
   const s = await start({ fetchImpl: geoFetch });
   try {
     fs.rmSync(path.join(s.dir, "listings.json"));
@@ -195,7 +195,7 @@ test("a profile name outside Latin-1 still gives a 401 with a password prompt", 
   } finally { await s.close(); }
 });
 
-test("sync with complete: true never marks a manually added car gone", async () => {
+test("sync with complete: true never marks a manually added listing gone", async () => {
   const s = await start({ fetchImpl: failFetch });
   try {
     const { id, listing: car } = await (await fetch(s.base + "/api/listings", { method: "POST", headers: json(s.auth), body: JSON.stringify(newFlat) })).json();
@@ -303,7 +303,7 @@ test("the server refuses to start without SITE_PASSWORD unless ALLOW_OPEN=1", ()
   assert.match(open.stdout, /Flat Hunt on/);
 });
 
-// ---------- editing and deleting cars ----------
+// ---------- editing and deleting listings ----------
 const otherTownFetch = async url => ({ ok: true, status: 200, json: async () => url.includes("nominatim") ? [{ display_name: "50667 Köln", lat: "50.9384", lon: "6.9599" }] : { routes: [{ distance: 41000, duration: 2700 }] } });
 const addManual = async s => (await (await fetch(s.base + "/api/listings", { method: "POST", headers: json(s.auth), body: JSON.stringify(newFlat) })).json());
 const editListing = (s, id, body, headers = json(s.auth)) => fetch(s.base + "/api/listings/" + id + "/listing", { method: "PATCH", headers, body: JSON.stringify(body) });
@@ -353,8 +353,8 @@ test("clearing utilities recomputes warm rent; a cold-rent change is tracked eve
     assert.equal(cold.priceHistory.at(-1).coldRent, 790);
     const meta = await (await fetch(s.base + "/api/meta", { headers: s.auth })).json();
     assert.deepEqual([meta.log[0].type, meta.log[0].field, meta.log[0].from, meta.log[0].to], ["price", "coldRent", 750, 790]);
-    // Without utilities a new cold rent cannot give a warm rent, so clearing cold rent alone leaves no rent at all.
-    assert.equal((await editListing(s, id, { coldRent: null })).status, 400);
+    // A warm rent that was not derived from cold rent and utilities survives clearing the cold rent.
+    assert.equal((await editListing(s, id, { coldRent: null })).status, 200);
     const warmOnly = (await (await editListing(s, id, { coldRent: null, warmRent: 990 })).json()).listing;
     assert.equal(warmOnly.coldRent, undefined);
     assert.equal(warmOnly.warmRent, 990);
@@ -438,8 +438,8 @@ test("listing edits reject unknown fields, invalid values, unknown listings and 
     assert.equal(j.details.length, 5);
     assert.equal((await editListing(s, "no-such-flat", { coldRent: 1000 })).status, 404);
     assert.equal((await editListing(s, id, { coldRent: 1000 }, { "Content-Type": "application/json" })).status, 401);
-    const all = (await (await fetch(s.base + "/api/listings", { headers: s.auth })).json()).listings;
-    assert.equal(all[id].coldRent, 750);
+    const cars = (await (await fetch(s.base + "/api/listings", { headers: s.auth })).json()).listings;
+    assert.equal(cars[id].coldRent, 750);
   } finally { await s.close(); }
 });
 
@@ -451,17 +451,17 @@ test("a failed listing save answers 500 and restores the listing", async () => {
     const r = await editListing(s, id, { coldRent: 900, title: "Changed" });
     assert.equal(r.status, 500);
     assert.deepEqual(await r.json(), { error: "save failed" });
-    const all = (await (await fetch(s.base + "/api/listings", { headers: s.auth })).json()).listings;
-    assert.equal(all[id].coldRent, 750);
-    assert.equal(all[id].warmRent, 930);
-    assert.equal(all[id].title, newFlat.title);
-    assert.equal(all[id].priceHistory.length, 1);
+    const cars = (await (await fetch(s.base + "/api/listings", { headers: s.auth })).json()).listings;
+    assert.equal(cars[id].coldRent, 750);
+    assert.equal(cars[id].warmRent, 930);
+    assert.equal(cars[id].title, newFlat.title);
+    assert.equal(cars[id].priceHistory.length, 1);
     const meta = await (await fetch(s.base + "/api/meta", { headers: s.auth })).json();
     assert.equal(meta.log.filter(e => e.type === "price").length, 0);
   } finally { await s.close(); }
 });
 
-test("DELETE removes the car, its log entries and its photos", async () => {
+test("DELETE removes the listing, its log entries and its photos", async () => {
   const s = await start({ fetchImpl: failFetch });
   try {
     await fetch(s.base + "/api/listings/golf", { method: "PUT", headers: s.sync, body: JSON.stringify({ title: "Golf", price: 9000 }) });
@@ -485,7 +485,7 @@ test("DELETE removes the car, its log entries and its photos", async () => {
   } finally { await s.close(); }
 });
 
-test("a failed delete answers 500 and restores the car and its log entries", async () => {
+test("a failed delete answers 500 and restores the listing and its log entries", async () => {
   const s = await start({ fetchImpl: failFetch });
   try {
     const { id } = await addManual(s);
@@ -578,5 +578,100 @@ test("recalc-commute skips listings without coordinates and answers 500 when sav
     assert.deepEqual(await r.json(), { error: "save failed" });
     const cars = (await (await fetch(s.base + "/api/listings", { headers: s.auth })).json()).listings;
     assert.equal(cars[id].commuteStale, true);
+  } finally { await s.close(); }
+});
+
+// ---------- warm rent derivation, rollback ----------
+const fixedFetch = geoFetch;
+const getListing = async (s, id) => (await (await fetch(s.base + "/api/listings", { headers: s.auth })).json()).listings[id];
+const addWarmOnly = async s => (await (await fetch(s.base + "/api/listings", { method: "POST", headers: json(s.auth), body: JSON.stringify({ ...newFlat, coldRent: undefined, utilities: undefined, warmRent: 990 }) })).json()).id;
+const logOf = async s => (await (await fetch(s.base + "/api/meta", { headers: s.auth })).json()).log;
+
+test("adding a cold rent to a warm-only listing keeps the warm rent and logs no price drop", async () => {
+  const s = await start({ fetchImpl: failFetch });
+  try {
+    const id = await addWarmOnly(s);
+    const l = (await (await editListing(s, id, { coldRent: 800 })).json()).listing;
+    assert.equal(l.coldRent, 800);
+    assert.equal(l.warmRent, 990);
+    assert.equal(l.priceHistory.length, 1);
+    assert.deepEqual((await logOf(s)).filter(e => e.type === "price"), []);
+  } finally { await s.close(); }
+});
+
+test("cold rent plus utilities derives the warm rent, clearing utilities on a derived warm rent removes it silently", async () => {
+  const s = await start({ fetchImpl: failFetch });
+  try {
+    const id = await addWarmOnly(s);
+    const l = (await (await editListing(s, id, { coldRent: 800, utilities: 200 })).json()).listing;
+    assert.equal(l.warmRent, 1000);
+    assert.deepEqual(l.priceHistory.map(p => p.price), [990, 1000]);
+    const logLen = (await logOf(s)).length;
+    const cleared = (await (await editListing(s, id, { utilities: null })).json()).listing;
+    assert.equal(cleared.warmRent, undefined);
+    assert.equal(cleared.coldRent, 800);
+    assert.equal(cleared.priceHistory.length, 2);
+    assert.equal((await logOf(s)).length, logLen);
+  } finally { await s.close(); }
+});
+
+test("clearing utilities removes the derived warm rent without logging a price change", async () => {
+  const s = await start({ fetchImpl: failFetch });
+  try {
+    const { id } = await addManual(s); // cold 750 + utilities 180 = 930
+    const log0 = (await logOf(s)).length;
+    const l = (await (await editListing(s, id, { utilities: null })).json()).listing;
+    assert.equal(l.warmRent, undefined);
+    assert.equal(l.priceHistory.length, 1);
+    assert.equal((await logOf(s)).length, log0);
+  } finally { await s.close(); }
+});
+
+test("a failed save restores owner fields, sync changes, the sync key write and meta", async () => {
+  const s = await start({ fetchImpl: failFetch });
+  try {
+    const { id } = await addManual(s);
+    const p0 = await getListing(s, id);
+    breakSaves(s);
+    const patch = await fetch(s.base + "/api/listings/" + id, { method: "PATCH", headers: json(s.auth), body: JSON.stringify({ notes: "changed", pick: true }) });
+    assert.equal(patch.status, 500);
+    assert.deepEqual(await patch.json(), { error: "save failed" });
+    const put = await fetch(s.base + "/api/listings/" + id, { method: "PUT", headers: s.sync, body: JSON.stringify({ title: "Other" }) });
+    assert.equal(put.status, 500);
+    const meta = await fetch(s.base + "/api/meta", { method: "PUT", headers: s.sync, body: JSON.stringify({ lastCheck: "2026-01-01" }) });
+    assert.equal(meta.status, 500);
+    const sync = await fetch(s.base + "/api/sync", { method: "POST", headers: s.sync, body: JSON.stringify({ seen: {}, complete: true, checkedAt: "x" }) });
+    assert.equal(sync.status, 500);
+    assert.deepEqual(await sync.json(), { error: "save failed" });
+    const newOne = await fetch(s.base + "/api/listings/brand-new", { method: "PUT", headers: s.sync, body: JSON.stringify({ title: "New" }) });
+    assert.equal(newOne.status, 500);
+    assert.deepEqual(await getListing(s, id), p0);
+    assert.equal(await getListing(s, "brand-new"), undefined);
+    const m = await (await fetch(s.base + "/api/meta", { headers: s.auth })).json();
+    assert.equal(m.lastCheck, null);
+    assert.equal(m.log.some(e => e.id === "brand-new"), false);
+  } finally { await s.close(); }
+});
+
+test("a failed save restores price changes and gone flags from a sync", async () => {
+  const s = await start({ fetchImpl: failFetch });
+  try {
+    await fetch(s.base + "/api/listings/scraped", { method: "PUT", headers: s.sync, body: JSON.stringify({ title: "Scraped", mode: "buy", price: 300000 }) });
+    const p0 = await getListing(s, "scraped");
+    breakSaves(s);
+    const r = await fetch(s.base + "/api/sync", { method: "POST", headers: s.sync, body: JSON.stringify({ seen: { scraped: { price: 250000 } } }) });
+    assert.equal(r.status, 500);
+    assert.deepEqual(await getListing(s, "scraped"), p0);
+  } finally { await s.close(); }
+});
+
+test("recalc-commute also refreshes the maps link", async () => {
+  const s = await start({ fetchImpl: geoFetch, pauseMs: 0 });
+  try {
+    const { id } = await addManual(s);
+    assert.equal((await getListing(s, id)).mapsUrl, undefined);
+    await fetch(s.base + "/api/profile", { method: "PUT", headers: json(s.auth), body: JSON.stringify(homeProfile()) });
+    await fetch(s.base + "/api/listings/recalc-commute", { method: "POST", headers: s.auth });
+    assert.match((await getListing(s, id)).mapsUrl, /origin=K%C3%B6nigsallee.*destination=51\.4556,7\.0116$/);
   } finally { await s.close(); }
 });

@@ -1,1 +1,1 @@
-{ "snapshotAt": "2026-01-01", "listings": { "example-car": { "title": "Example Estate", "price": 9500, "km": 120000, "regYear": 2017, "regMonth": 3, "status": "new", "messages": [] } } }
+{ "snapshotAt": "2026-01-01", "listings": { "example-flat": { "title": "Example flat", "mode": "rent", "coldRent": 750, "utilities": 180, "warmRent": 930, "rooms": 2, "size": 58, "city": "Essen", "status": "new", "messages": [] } } }

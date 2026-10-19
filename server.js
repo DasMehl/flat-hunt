@@ -95,14 +95,18 @@ function createApp(options = {}) {
     // Applied without awaiting, so a concurrent edit or delete cannot interleave.
     const before = [];
     for (const [id, c] of Object.entries(state.listings)) {
-      before.push([c, c.commute, c.commuteStale]);
-      if (results.has(id)) c.commute = results.get(id);
+      before.push([c, c.commute, c.commuteStale, c.mapsUrl]);
+      if (results.has(id)) {
+        c.commute = results.get(id);
+        if (places.length) c.mapsUrl = "https://www.google.com/maps/dir/?api=1&origin=" + encodeURIComponent(places[0].address) + `&destination=${c.lat},${c.lon}`;
+      }
       else if (c.commute !== undefined) c.commute = places.map(() => null);
       delete c.commuteStale;
     }
     try { await persist(); }
     catch (e) {
-      for (const [c, commute, stale] of before) {
+      for (const [c, commute, stale, maps] of before) {
+        if (maps === undefined) delete c.mapsUrl; else c.mapsUrl = maps;
         if (commute === undefined) delete c.commute; else c.commute = commute;
         if (stale === undefined) delete c.commuteStale; else c.commuteStale = stale;
       }
@@ -164,12 +168,14 @@ function createApp(options = {}) {
     }
   }
 
-  // An edit plus its derived warm rent: a new cold rent or utilities gives warm = cold + utilities, the warm rent the
-  // edit sets itself, or none when neither is available.
+  // An edit plus its derived warm rent: with cold rent and utilities both known, warm = cold + utilities. Otherwise the
+  // warm rent stays, unless it was itself derived from the old cold rent and utilities. A warm rent in the edit wins.
   function applyEdit(l, v) {
+    const oldWarm = l.warmRent, oldSum = l.coldRent != null && l.utilities != null ? l.coldRent + l.utilities : null;
     applyInput(l, v);
     if (("coldRent" in v || "utilities" in v) && !("warmRent" in v)) {
-      if (l.coldRent != null && l.utilities != null) l.warmRent = l.coldRent + l.utilities; else delete l.warmRent;
+      if (l.coldRent != null && l.utilities != null) l.warmRent = l.coldRent + l.utilities;
+      else if (oldWarm != null && oldWarm === oldSum) delete l.warmRent;
     }
   }
   // A price-history entry; rent entries also keep the cold rent.
@@ -231,8 +237,13 @@ function createApp(options = {}) {
     if (["nextStep", "notes"].some(k => k in p && (typeof p[k] !== "string" || p[k].length > 10000))) return res.status(400).json({ error: "invalid text" });
     if ("pick" in p && typeof p.pick !== "boolean") return res.status(400).json({ error: "invalid pick" });
     if ("messages" in p && (!Array.isArray(p.messages) || p.messages.length > 200 || p.messages.some(m => !m || typeof m !== "object" || typeof m.text !== "string" || m.text.length > 10000))) return res.status(400).json({ error: "invalid messages" });
+    const prev = structuredClone(c);
     for (const k of allowed) if (k in p) c[k] = p[k];
-    try { await persist(); res.json({ ok: true, listing: c }); } catch (e) { res.status(500).json({ error: "save failed" }); }
+    try { await persist(); } catch (e) {
+      if (state.listings[req.params.id] === c) state.listings[req.params.id] = prev;
+      return res.status(500).json({ error: "save failed" });
+    }
+    res.json({ ok: true, listing: c });
   });
 
   // Fields that describe where the listing is; a new address makes all of them stale.
@@ -260,8 +271,10 @@ function createApp(options = {}) {
     const after = headline(c), coldAfter = c.mode === "rent" ? c.coldRent ?? null : null;
     // The headline (price, else warm rent, else cold rent) is logged when it changes; otherwise a cold-rent change.
     const field = c.mode === "buy" ? "price" : c.warmRent != null ? "warmRent" : "coldRent";
+    // A derived warm rent that disappears (utilities cleared) changes the basis, not the price.
+    const warmDropped = before != null && c.mode === "rent" && prev.warmRent != null && c.warmRent == null;
     let entry = null;
-    if (after != null && after !== before) entry = { date: d, type: "price", field, id, text: c.title, from: before, to: after };
+    if (after != null && after !== before && !warmDropped) entry = { date: d, type: "price", field, id, text: c.title, from: before, to: after };
     else if (coldAfter != null && coldBefore != null && coldAfter !== coldBefore) entry = { date: d, type: "price", field: "coldRent", id, text: c.title, from: coldBefore, to: coldAfter };
     if (entry) {
       c.priceHistory = [...(c.priceHistory || []), historyEntry(c, d)];
@@ -308,29 +321,42 @@ function createApp(options = {}) {
     const id = req.params.id, incoming = req.body || {};
     if (!/^[a-z0-9][a-z0-9-]{0,79}$/.test(id)) return res.status(400).json({ error: "invalid id" });
     const listing = Object.fromEntries(Object.entries(incoming).filter(([k, v]) => LISTING_FIELDS.includes(k) && (!LINK_FIELDS.includes(k) || isHttpUrl(v))));
-    const prev = state.listings[id];
+    const prev = state.listings[id], snap = prev ? structuredClone(prev) : null;
     state.listings[id] = prev ? { ...prev, ...listing } : { status: "new", pick: false, notes: "", nextStep: "", messages: [], addedAt: today(), ...listing };
     if (!prev && typeof incoming.pick === "boolean") state.listings[id].pick = incoming.pick;
-    if (!prev) state.meta.log.unshift({ date: today(), type: "new", id, text: state.listings[id].title, price: headline(state.listings[id]) });
-    try { await persist(); } catch (e) { return res.status(500).json({ error: "save failed" }); }
+    const entry = prev ? null : { date: today(), type: "new", id, text: state.listings[id].title, price: headline(state.listings[id]) };
+    if (entry) state.meta.log.unshift(entry);
+    const written = state.listings[id];
+    try { await persist(); } catch (e) {
+      if (state.listings[id] === written) { if (snap) state.listings[id] = snap; else delete state.listings[id]; }
+      const at = entry ? state.meta.log.indexOf(entry) : -1;
+      if (at >= 0) state.meta.log.splice(at, 1);
+      return res.status(500).json({ error: "save failed" });
+    }
     res.json({ ok: true, created: !prev });
   });
 
   app.put("/api/meta", requireKey, async (req, res) => {
     const b = req.body;
     if (!b || typeof b !== "object" || Array.isArray(b) || Object.keys(b).some(k => k !== "lastCheck")) return res.status(400).json({ error: "unsupported field" });
+    const prevCheck = state.meta.lastCheck;
     if ("lastCheck" in b) {
       if (b.lastCheck !== null && (typeof b.lastCheck !== "string" || b.lastCheck.length > 40)) return res.status(400).json({ error: "invalid lastCheck" });
       state.meta.lastCheck = b.lastCheck;
     }
-    try { await persist(); } catch (e) { return res.status(500).json({ error: "save failed" }); }
+    try { await persist(); } catch (e) {
+      if (state.meta.lastCheck === b.lastCheck) state.meta.lastCheck = prevCheck;
+      return res.status(500).json({ error: "save failed" });
+    }
     res.json({ ok: true, meta: state.meta });
   });
 
   app.post("/api/sync", requireKey, async (req, res) => {
     const seen = (req.body && req.body.seen) || {}, d = today(), changes = [];
+    const snaps = new Map(), prevCheck = state.meta.lastCheck, prevLog = state.meta.log;
     for (const [id, c] of Object.entries(state.listings)) {
       const s = seen[id];
+      snaps.set(id, [c, structuredClone(c)]);
       if (s) {
         c.lastSeenAt = d;
         if (c.gone) { c.gone = false; changes.push({ date: d, type: "back", id, text: c.title }); }
@@ -341,7 +367,12 @@ function createApp(options = {}) {
     }
     state.meta.lastCheck = req.body.checkedAt || new Date().toISOString();
     state.meta.log = [...changes, ...state.meta.log].slice(0, 200);
-    try { await persist(); } catch (e) { return res.status(500).json({ error: "save failed" }); }
+    const log = state.meta.log;
+    try { await persist(); } catch (e) {
+      for (const [id, [c, snap]] of snaps) if (state.listings[id] === c) state.listings[id] = snap;
+      if (state.meta.log === log) { state.meta.lastCheck = prevCheck; state.meta.log = prevLog; }
+      return res.status(500).json({ error: "save failed" });
+    }
     res.json({ ok: true, changes });
   });
 

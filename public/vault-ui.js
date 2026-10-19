@@ -312,6 +312,8 @@
     const list = el("div", "vu-list"); list.setAttribute("aria-live", "polite");
     wrap.append(up, list);
 
+    // Type, label and date go in a header (base64url JSON), not the URL: URLs end up in access logs.
+    const metaHeader = m => { let bin = ""; for (const b of new TextEncoder().encode(JSON.stringify(m))) bin += String.fromCharCode(b); return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, ""); };
     up.onsubmit = async e => {
       e.preventDefault();
       uerr.textContent = ""; unote.textContent = "";
@@ -321,7 +323,7 @@
       const mime = mimeOf(f);
       ubtn.disabled = true; unote.textContent = t.uploading;
       let r;
-      try { r = await api("/api/vault?" + new URLSearchParams({ type: type.value, label: label.value.trim(), date: date.value }), { method: "POST", headers: { "Content-Type": mime }, body: f }); }
+      try { r = await api("/api/vault", { method: "POST", headers: { "Content-Type": mime, "X-Doc-Meta": metaHeader({ type: type.value, label: label.value.trim(), date: date.value }) }, body: f }); }
       catch (x) { ubtn.disabled = false; unote.textContent = ""; if (x instanceof Off) return onOff(); uerr.textContent = t.netFail; return; }
       ubtn.disabled = false; unote.textContent = "";
       if (!r.ok) { const j = await r.json().catch(() => ({})); uerr.textContent = uploadErrorText(t, r.status, j, mime); return; }

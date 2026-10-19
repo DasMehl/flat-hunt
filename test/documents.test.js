@@ -35,6 +35,32 @@ test("payslips older than three months are outdated; other types and undated pay
   assert.equal(D.isOutdated({ type: "contract", date: "2020-01-01" }, now), false);
 });
 
+test("payslip limit clamps to the target month's length", () => {
+  const out = (date, now) => D.isOutdated({ type: "payslip", date }, now);
+  // 31 May -> 28 Feb 2027 (not 3 March)
+  assert.equal(out("2027-02-28", "2027-05-31"), false);
+  assert.equal(out("2027-02-27", "2027-05-31"), true);
+  // leap year: 31 May 2028 -> 29 Feb
+  assert.equal(out("2028-02-29", "2028-05-31"), false);
+  assert.equal(out("2028-02-28", "2028-05-31"), true);
+  // 30 Nov -> 30 Aug; 31 Aug -> 31 May; 31 Dec -> 30 Sep
+  assert.equal(out("2026-08-30", "2026-11-30"), false);
+  assert.equal(out("2026-08-29", "2026-11-30"), true);
+  assert.equal(out("2026-05-31", "2026-08-31"), false);
+  assert.equal(out("2026-05-30", "2026-08-31"), true);
+  assert.equal(out("2026-09-30", "2026-12-31"), false);
+  assert.equal(out("2026-09-29", "2026-12-31"), true);
+  // January wraps into the previous year
+  assert.equal(out("2025-10-31", "2026-01-31"), false);
+  assert.equal(out("2025-10-30", "2026-01-31"), true);
+});
+
+test("labels reject control characters", () => {
+  for (const c of ["\u0000", "\n", "\t", "\u001f", "\u007f"]) assert.match(D.validateDocMeta({ type: "id", label: "a" + c + "b" }).errors[0], /^label:/, JSON.stringify(c));
+  assert.match(D.validateDocMeta({ label: "a\nb" }, { partial: true }).errors[0], /^label:/);
+  assert.deepEqual(D.validateDocMeta({ type: "id", label: "Ünï – ok" }).errors, []);
+});
+
 test("listDocs sorts newest first, adds the outdated flag and hides the file name", () => {
   const index = { docs: {
     a: { id: "a", file: "f1", type: "payslip", date: "2026-01-31", uploadedAt: "2026-02-01T10:00:00.000Z" },

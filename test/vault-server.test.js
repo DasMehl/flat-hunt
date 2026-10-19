@@ -5,10 +5,10 @@ const os = require("node:os");
 const path = require("node:path");
 const { spawnSync } = require("node:child_process");
 const { PDFDocument } = require("pdf-lib");
-const { start, TEST_VAULT_KEY, OTHER_VAULT_KEY, TINY_PNG, TINY_JPEG, pdfPageStreams, hasPdfText } = require("./helpers");
+const { docMeta, start, TEST_VAULT_KEY, OTHER_VAULT_KEY, TINY_PNG, TINY_JPEG, pdfPageStreams, hasPdfText } = require("./helpers");
 const onePagePdf = async () => { const d = await PDFDocument.create(); d.addPage([595.28, 841.89]); return Buffer.from(await d.save()); };
-const upload = (s, body, type, query = "type=payslip&label=September&date=2026-09-30") =>
-  fetch(s.base + "/api/vault?" + query, { method: "POST", headers: { ...s.auth, "Content-Type": type }, body });
+const upload = (s, body, type, meta = "type=payslip&label=September&date=2026-09-30", headers = {}) =>
+  fetch(s.base + "/api/vault", { method: "POST", headers: { ...s.auth, "Content-Type": type, "X-Doc-Meta": docMeta(meta), ...headers }, body });
 
 const json = (h = {}) => ({ ...h, "Content-Type": "application/json" });
 const withVault = (o = {}) => start({ vaultKey: TEST_VAULT_KEY, ...o });
@@ -294,5 +294,29 @@ test("malformed JSON answers 400 JSON; unknown or malformed ids answer 404", asy
     const bad = await fetch(s.base + "/api/vault/0123456789abcdef", { method: "PUT", headers: json(s.auth), body: "{nope" });
     assert.deepEqual([bad.status, await bad.json()], [400, { error: "invalid json" }]);
     for (const id of ["0123456789abcdef", "..%2Fkeycheck", "constructor"]) assert.equal((await fetch(s.base + "/api/vault/" + id, { headers: s.auth })).status, 404, id);
+  } finally { await s.close(); }
+});
+
+test("upload metadata travels in X-Doc-Meta; the URL carries none and query parameters are refused", async () => {
+  const s = await withVault();
+  try {
+    const pdf = await onePagePdf();
+    const post = (url, headers) => fetch(s.base + url, { method: "POST", headers: { ...s.auth, "Content-Type": "application/pdf", ...headers }, body: pdf });
+    const q = await post("/api/vault?type=payslip", { "X-Doc-Meta": docMeta({ type: "payslip" }) });
+    assert.equal(q.status, 400);
+    assert.equal((await post("/api/vault?type=payslip", {})).status, 400); // no silent fallback to the URL
+    assert.equal((await post("/api/vault", {})).status, 400); // no header: type missing
+    const ok = await upload(s, pdf, "application/pdf", { type: "contract", label: "Jürgen – Ünï", date: "2026-01-02" });
+    assert.equal(ok.status, 201);
+    assert.deepEqual((await ok.json()).doc.label, "Jürgen – Ünï");
+    for (const bad of ["!!!", Buffer.from("not json").toString("base64url"), Buffer.from("[1]").toString("base64url"), Buffer.from("null").toString("base64url"), "A".repeat(2049), Buffer.from(JSON.stringify({ type: "id", label: "x".repeat(3000) })).toString("base64url")]) {
+      const r = await post("/api/vault", { "X-Doc-Meta": bad });
+      assert.equal(r.status, 400, bad.slice(0, 20));
+      assert.ok((await r.json()).error);
+    }
+    assert.equal((await upload(s, pdf, "application/pdf", { type: "id", label: "a\u0000b" })).status, 400);
+    assert.equal((await upload(s, pdf, "application/pdf", { type: "id", label: "a\nb" })).status, 400);
+    assert.equal((await post("/api/vault", { "X-Doc-Meta": "A".repeat(2048) })).status, 400);
+    assert.equal(Object.keys((await (await fetch(s.base + "/api/vault", { headers: s.auth })).json()).docs).length, 1);
   } finally { await s.close(); }
 });

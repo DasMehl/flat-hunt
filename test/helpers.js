@@ -42,4 +42,7 @@ async function pdfPageStreams(bytes) {
 const pdfHex = text => Buffer.from(text, "latin1").toString("hex");
 const hasPdfText = (stream, text) => stream.toLowerCase().includes(pdfHex(text));
 
-module.exports = { start, TEST_VAULT_KEY, OTHER_VAULT_KEY, TINY_PNG, TINY_JPEG, pdfPageStreams, hasPdfText };
+// The X-Doc-Meta header value for an upload: "type=id&label=x" or an object, as base64url JSON.
+const docMeta = m => Buffer.from(JSON.stringify(typeof m === "string" ? Object.fromEntries(new URLSearchParams(m)) : m)).toString("base64url");
+
+module.exports = { docMeta, start, TEST_VAULT_KEY, OTHER_VAULT_KEY, TINY_PNG, TINY_JPEG, pdfPageStreams, hasPdfText };

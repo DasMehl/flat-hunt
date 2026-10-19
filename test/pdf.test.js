@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { PDFDocument } = require("pdf-lib");
+const { PDFDocument, StandardFonts, degrees } = require("pdf-lib");
 const P = require("../lib/pdf");
 const { defaultApplicant } = require("../lib/applicant");
 const { TINY_PNG, TINY_JPEG, pdfPageStreams, hasPdfText } = require("./helpers");
@@ -69,4 +69,39 @@ test("summaryPdf copes with emoji and Cyrillic, and keeps line breaks in about",
   assert.ok(hasPdfText(page, "Line one ?"));
   assert.ok(hasPdfText(page, "Line two"));
   assert.ok(hasPdfText(page, "Line three"));
+});
+
+// The text matrices (a b c d e f) of a watermarked page: [diagonal, bottom line].
+const matrices = s => [...s.matchAll(/^(\S+) (\S+) (\S+) (\S+) (\S+) (\S+) Tm$/gm)].map(m => m.slice(1).map(Number));
+const near = (a, b) => assert.ok(Math.abs(a - b) < 0.01, `${a} != ${b}`);
+
+test("watermarkPdf follows an offset MediaBox/CropBox", async () => {
+  const d = await PDFDocument.create();
+  const p = d.addPage([800, 900]);
+  p.setMediaBox(100, 200, 300, 400); // x 100–400, y 200–600
+  p.setCropBox(100, 200, 300, 400);
+  const out = await P.watermarkPdf(Buffer.from(await d.save()), "Hello");
+  const stream = (await pdfPageStreams(out))[0];
+  const [diag, line] = matrices(stream);
+  near(line[4], 118); near(line[5], 212);
+  // The diagonal's centre lies in the middle of the visible page (250, 400), not of a page starting at 0,0.
+  const size = Number(stream.match(/ (\d+(?:\.\d+)?) Tf/)[1]);
+  const tw = (await (await PDFDocument.create()).embedFont(StandardFonts.HelveticaBold)).widthOfTextAtSize("Hello", size);
+  const cx = diag[4] + (tw / 2) * diag[0] + (size / 3) * diag[2], cy = diag[5] + (tw / 2) * diag[1] + (size / 3) * diag[3];
+  near(cx, 250); near(cy, 400);
+});
+
+test("watermarkPdf sits upright on a page rotated by 90 degrees", async () => {
+  const d = await PDFDocument.create();
+  const p = d.addPage([300, 400]);
+  p.setRotation(degrees(90)); // viewed as 400 wide, 300 tall
+  const out = await P.watermarkPdf(Buffer.from(await d.save()), "Hello");
+  const [diag, line] = matrices((await pdfPageStreams(out))[0]);
+  // Bottom line: 18 from the visible left edge, 12 from the visible bottom edge = user (300 - 12, 18).
+  near(line[4], 288); near(line[5], 18);
+  // Its baseline runs along the visible bottom, i.e. along user +y.
+  near(line[0], 0); near(line[1], 1);
+  // The diagonal rises towards the visible top right: visible angle atan2(300, 400), turned back by the page rotation.
+  const visible = Math.atan2(diag[1], diag[0]) * 180 / Math.PI - 90;
+  near(visible, Math.atan2(300, 400) * 180 / Math.PI);
 });

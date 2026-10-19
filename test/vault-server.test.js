@@ -4,7 +4,11 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const { spawnSync } = require("node:child_process");
-const { start, TEST_VAULT_KEY, OTHER_VAULT_KEY, pdfPageStreams, hasPdfText } = require("./helpers");
+const { PDFDocument } = require("pdf-lib");
+const { start, TEST_VAULT_KEY, OTHER_VAULT_KEY, TINY_PNG, TINY_JPEG, pdfPageStreams, hasPdfText } = require("./helpers");
+const onePagePdf = async () => { const d = await PDFDocument.create(); d.addPage([595.28, 841.89]); return Buffer.from(await d.save()); };
+const upload = (s, body, type, query = "type=payslip&label=September&date=2026-09-30") =>
+  fetch(s.base + "/api/vault?" + query, { method: "POST", headers: { ...s.auth, "Content-Type": type }, body });
 
 const json = (h = {}) => ({ ...h, "Content-Type": "application/json" });
 const withVault = (o = {}) => start({ vaultKey: TEST_VAULT_KEY, ...o });
@@ -139,5 +143,156 @@ test("summary.pdf: 404 without applicant, 400 for an unknown language, one page 
     assert.equal(pages.length, 1);
     assert.ok(hasPdfText(pages[0], "Alex Example"));
     assert.ok(hasPdfText(pages[0], "Selbstauskunft (Kurzfassung)"));
+  } finally { await s.close(); }
+});
+
+// ---------- Task 4: documents ----------
+test("upload, list, download, edit and delete a document; everything on disk is encrypted", async () => {
+  const s = await withVault();
+  try {
+    const pdf = await onePagePdf();
+    const up = await upload(s, pdf, "application/pdf");
+    assert.equal(up.status, 201);
+    const { doc } = await up.json();
+    assert.match(doc.id, /^[0-9a-f]{16}$/);
+    assert.deepEqual({ ...doc, id: 0, uploadedAt: 0 }, { id: 0, type: "payslip", label: "September", date: "2026-09-30", mime: "application/pdf", size: pdf.length, uploadedAt: 0, redactedAt: null, outdated: false });
+    const png = await (await upload(s, TINY_PNG, "image/png", "type=id")).json();
+    assert.deepEqual([png.doc.label, png.doc.date], ["", null]);
+
+    const list = (await (await fetch(s.base + "/api/vault", { headers: s.auth })).json()).docs;
+    assert.deepEqual(list.map(d => d.id).sort(), [doc.id, png.doc.id].sort());
+    assert.ok(list.every(d => d.file === undefined));
+
+    const dl = await fetch(s.base + "/api/vault/" + doc.id, { headers: s.auth });
+    assert.equal(dl.status, 200);
+    assert.equal(dl.headers.get("content-type"), "application/pdf");
+    assert.equal(dl.headers.get("content-disposition"), 'attachment; filename="payslip-2026-09-30.pdf"');
+    assert.equal(dl.headers.get("cache-control"), "no-store");
+    assert.deepEqual(Buffer.from(await dl.arrayBuffer()), pdf);
+
+    const ed = await fetch(s.base + "/api/vault/" + doc.id, { method: "PUT", headers: json(s.auth), body: JSON.stringify({ label: "Payslip September", date: "2026-06-30" }) });
+    assert.equal(ed.status, 200);
+    assert.deepEqual([(await ed.json()).doc.label], ["Payslip September"]);
+    assert.equal((await fetch(s.base + "/api/vault/" + doc.id, { method: "PUT", headers: json(s.auth), body: JSON.stringify({ size: 1 }) })).status, 400);
+
+    for (const f of fs.readdirSync(path.join(s.dir, "vault"))) {
+      const raw = fs.readFileSync(path.join(s.dir, "vault", f));
+      assert.ok(!raw.includes("Payslip September") && !raw.includes("%PDF") && !raw.includes("PNG"), f + " is not encrypted");
+    }
+    assert.equal((await fetch(s.base + "/api/vault/" + doc.id, { method: "DELETE", headers: s.auth })).status, 200);
+    assert.equal((await fetch(s.base + "/api/vault/" + doc.id, { headers: s.auth })).status, 404);
+    assert.equal(fs.readdirSync(path.join(s.dir, "vault")).filter(f => f.endsWith(".bin") && f !== "keycheck.bin").length, 1);
+  } finally { await s.close(); }
+});
+
+test("uploads: wrong magic bytes 400, other types 415, empty 400, bad metadata 400, unreadable PDF 400", async () => {
+  const s = await withVault();
+  try {
+    const pdf = await onePagePdf();
+    const mismatch = await upload(s, TINY_PNG, "application/pdf");
+    assert.equal(mismatch.status, 400);
+    assert.deepEqual(await mismatch.json(), { error: "file content does not match its type" });
+    assert.equal((await upload(s, pdf, "image/jpeg")).status, 400);
+    assert.equal((await upload(s, Buffer.from("GIF89a"), "image/gif")).status, 415);
+    assert.equal((await upload(s, Buffer.alloc(0), "image/png")).status, 400);
+    assert.equal((await upload(s, pdf, "application/pdf", "type=passport")).status, 400);
+    assert.equal((await upload(s, pdf, "application/pdf", "type=id&date=31.12.2026")).status, 400);
+    assert.equal((await upload(s, pdf, "application/pdf", "type=id&owner=x")).status, 400);
+    const broken = await upload(s, Buffer.from("%PDF-1.7 not really"), "application/pdf", "type=id");
+    assert.deepEqual([broken.status, (await broken.json()).error], [400, "pdf cannot be read (encrypted or damaged)"]);
+    assert.equal((await upload(s, TINY_JPEG, "image/jpeg", "type=id")).status, 201);
+    assert.equal((await (await fetch(s.base + "/api/vault", { headers: s.auth })).json()).docs.length, 1);
+  } finally { await s.close(); }
+});
+
+test("uploads over 10 MB answer 413 with JSON", async () => {
+  const s = await withVault();
+  try {
+    const big = Buffer.alloc(10 * 1024 * 1024 + 1); big.write("%PDF-1.7");
+    const r = await upload(s, big, "application/pdf");
+    assert.equal(r.status, 413);
+    assert.deepEqual(await r.json(), { error: "file too large" });
+  } finally { await s.close(); }
+});
+
+test("payslips older than three months are flagged in the list", async () => {
+  const s = await withVault({ now: () => new Date("2026-10-20T12:00:00Z") });
+  try {
+    const pdf = await onePagePdf();
+    await upload(s, pdf, "application/pdf", "type=payslip&date=2026-06-30");
+    await upload(s, pdf, "application/pdf", "type=payslip&date=2026-09-30");
+    const docs = (await (await fetch(s.base + "/api/vault", { headers: s.auth })).json()).docs;
+    assert.deepEqual(docs.map(d => [d.date, d.outdated]).sort(), [["2026-06-30", true], ["2026-09-30", false]]);
+  } finally { await s.close(); }
+});
+
+test("replace stores a new version, keeps the metadata, records redactedAt and removes the old file", async () => {
+  const s = await withVault();
+  try {
+    const { doc } = await (await upload(s, TINY_PNG, "image/png")).json();
+    const before = fs.readdirSync(path.join(s.dir, "vault")).filter(f => f.endsWith(".bin") && f !== "keycheck.bin");
+    const pdf = await onePagePdf();
+    const r = await fetch(s.base + "/api/vault/" + doc.id + "/replace", { method: "POST", headers: { ...s.auth, "Content-Type": "application/pdf" }, body: pdf });
+    assert.equal(r.status, 200);
+    const after = (await r.json()).doc;
+    assert.deepEqual([after.id, after.type, after.label, after.date, after.mime, after.size], [doc.id, "payslip", "September", "2026-09-30", "application/pdf", pdf.length]);
+    assert.ok(after.redactedAt);
+    const files = fs.readdirSync(path.join(s.dir, "vault")).filter(f => f.endsWith(".bin") && f !== "keycheck.bin");
+    assert.equal(files.length, 1);
+    assert.notEqual(files[0], before[0]);
+    assert.deepEqual(Buffer.from(await (await fetch(s.base + "/api/vault/" + doc.id, { headers: s.auth })).arrayBuffer()), pdf);
+    assert.equal((await fetch(s.base + "/api/vault/" + doc.id + "/replace", { method: "POST", headers: { ...s.auth, "Content-Type": "application/pdf" }, body: TINY_PNG })).status, 400);
+    assert.equal((await fetch(s.base + "/api/vault/0123456789abcdef/replace", { method: "POST", headers: { ...s.auth, "Content-Type": "application/pdf" }, body: pdf })).status, 404);
+  } finally { await s.close(); }
+});
+
+test("a failed index save on upload answers 500 and leaves no document behind", async () => {
+  const s = await withVault();
+  try {
+    fs.mkdirSync(path.join(s.dir, "vault", "index.json"));
+    const r = await upload(s, await onePagePdf(), "application/pdf");
+    assert.equal(r.status, 500);
+    fs.rmdirSync(path.join(s.dir, "vault", "index.json"));
+    assert.deepEqual((await (await fetch(s.base + "/api/vault", { headers: s.auth })).json()).docs, []);
+    assert.deepEqual(fs.readdirSync(path.join(s.dir, "vault")).filter(f => f.endsWith(".bin")), ["keycheck.bin"]);
+  } finally { await s.close(); }
+});
+
+test("a damaged image with the right magic bytes answers 400 JSON", async () => {
+  const s = await withVault();
+  try {
+    const r = await upload(s, Buffer.concat([TINY_PNG.subarray(0, 8), Buffer.from("garbage")]), "image/png", "type=id");
+    assert.deepEqual([r.status, (await r.json()).error], [400, "image cannot be read"]);
+  } finally { await s.close(); }
+});
+
+test("a failed index save on replace, edit and delete answers 500 and keeps the old document", async () => {
+  const s = await withVault();
+  try {
+    const pdf = await onePagePdf();
+    const { doc } = await (await upload(s, TINY_PNG, "image/png")).json();
+    const bins = () => fs.readdirSync(path.join(s.dir, "vault")).filter(f => f.endsWith(".bin")).sort();
+    const before = bins();
+    const idx = path.join(s.dir, "vault", "index.json"), saved = fs.readFileSync(idx);
+    fs.rmSync(idx); fs.mkdirSync(idx);
+    const rep = await fetch(s.base + "/api/vault/" + doc.id + "/replace", { method: "POST", headers: { ...s.auth, "Content-Type": "application/pdf" }, body: pdf });
+    assert.deepEqual([rep.status, (await rep.json()).error], [500, "save failed"]);
+    const ed = await fetch(s.base + "/api/vault/" + doc.id, { method: "PUT", headers: json(s.auth), body: JSON.stringify({ label: "New" }) });
+    assert.equal(ed.status, 500);
+    assert.equal((await fetch(s.base + "/api/vault/" + doc.id, { method: "DELETE", headers: s.auth })).status, 500);
+    assert.deepEqual(bins(), before);
+    fs.rmdirSync(idx); fs.writeFileSync(idx, saved);
+    const list = (await (await fetch(s.base + "/api/vault", { headers: s.auth })).json()).docs;
+    assert.deepEqual([list.length, list[0].label, list[0].mime, list[0].redactedAt], [1, "", "image/png", null]);
+    assert.deepEqual(Buffer.from(await (await fetch(s.base + "/api/vault/" + doc.id, { headers: s.auth })).arrayBuffer()), TINY_PNG);
+  } finally { await s.close(); }
+});
+
+test("malformed JSON answers 400 JSON; unknown or malformed ids answer 404", async () => {
+  const s = await withVault();
+  try {
+    const bad = await fetch(s.base + "/api/vault/0123456789abcdef", { method: "PUT", headers: json(s.auth), body: "{nope" });
+    assert.deepEqual([bad.status, await bad.json()], [400, { error: "invalid json" }]);
+    for (const id of ["0123456789abcdef", "..%2Fkeycheck", "constructor"]) assert.equal((await fetch(s.base + "/api/vault/" + id, { headers: s.auth })).status, 404, id);
   } finally { await s.close(); }
 });

@@ -388,6 +388,12 @@ function createApp(options = {}) {
 
   app.use("/img", express.static(path.join(dataDir, "img"), { maxAge: "1d" }));
   app.use(express.static(path.join(__dirname, "public"), { index: "index.html", setHeaders: (res, p) => res.set("Cache-Control", /\.(html|json|js)$/.test(p) ? "no-cache" : "public, max-age=86400") }));
+  // Body-parser errors as JSON: too large -> 413, broken JSON -> 400.
+  app.use((err, req, res, next) => {
+    if (err && err.type === "entity.too.large") return res.status(413).json({ error: "file too large" });
+    if (err && err.type === "entity.parse.failed") return res.status(400).json({ error: "invalid json" });
+    next(err);
+  });
   return app;
 }
 

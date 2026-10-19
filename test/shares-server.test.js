@@ -202,3 +202,81 @@ test("deleting a listing: a failed listing write after the shares were revoked k
     assert.equal((await fetch(s.base + "/api/listings/flat/shares", { headers: s.auth })).status, 200);
   } finally { await s.close(); }
 });
+
+// ---------- Task 6: public share page and documents ----------
+test("the share page is public, lists the documents and sends no-store, noindex and no-referrer", async () => {
+  const s = await setup();
+  try {
+    const { body } = await s.share();
+    const r = await get(s, body.url);
+    assert.equal(r.status, 200);
+    assert.equal(r.headers.get("cache-control"), "no-store");
+    assert.equal(r.headers.get("x-robots-tag"), "noindex, nofollow");
+    assert.equal(r.headers.get("referrer-policy"), "no-referrer");
+    const html = await r.text();
+    assert.match(html, /Alex Example shares these documents for the application for Beispielstraße 1, 40210 Düsseldorf/);
+    for (const id of [s.payslip, s.idDoc, "summary"]) assert.ok(html.includes(`href="${body.url}/${id}"`), id);
+    assert.match(html, /until 27\.10\.2026/);
+  } finally { await s.close(); }
+});
+
+test("each shared document is a PDF with the watermark on every page, and each view is logged without the IP", async () => {
+  const s = await setup({ lang: "de" });
+  try {
+    const { body } = await s.share();
+    const text = "Nur für die Bewerbung um Beispielstraße 1, 40210 Düsseldorf · 20.10.2026";
+    for (const [id, pages] of [[s.payslip, 2], [s.idDoc, 1], ["summary", 1]]) {
+      const r = await get(s, body.url + "/" + id);
+      assert.equal(r.status, 200, id);
+      assert.equal(r.headers.get("content-type"), "application/pdf");
+      assert.equal(r.headers.get("x-robots-tag"), "noindex, nofollow");
+      const streams = await pdfPageStreams(Buffer.from(await r.arrayBuffer()));
+      assert.equal(streams.length, pages, id);
+      for (const st of streams) assert.ok(hasPdfText(st, text), "watermark missing in " + id);
+    }
+    const share = (await (await fetch(s.base + "/api/listings/flat/shares", { headers: s.auth })).json()).shares[0];
+    assert.deepEqual(share.opens.map(o => o.docId), [s.payslip, s.idDoc, "summary"]);
+    assert.deepEqual(Object.keys(share.opens[0]).sort(), ["at", "docId"]);
+    assert.ok(!fs.readFileSync(path.join(s.dir, "shares.json"), "utf8").includes("127.0.0.1"));
+  } finally { await s.close(); }
+});
+
+test("unknown, expired and revoked links and documents outside the share all get the same 404", async () => {
+  const s = await setup();
+  try {
+    const live = (await s.share({ docIds: [s.payslip] })).body;
+    const revoked = (await s.share({ docIds: [s.payslip] })).body;
+    await fetch(s.base + "/api/shares/" + revoked.share.id, { method: "DELETE", headers: s.auth });
+    const short = (await s.share({ docIds: [s.payslip], days: 1 })).body;
+    s.setClock("2026-10-21T10:00:01Z");
+    const answers = [];
+    for (const p of ["/s/" + "A".repeat(43), "/s/short", short.url, short.url + "/" + s.payslip, revoked.url, revoked.url + "/" + s.payslip, live.url + "/" + s.idDoc, live.url + "/x/y", "/s/"]) {
+      const r = await get(s, p);
+      answers.push([p, r.status, r.headers.get("content-type"), await r.text(), r.headers.get("cache-control")]);
+    }
+    for (const [p, ...a] of answers) assert.deepEqual(a, [404, "text/plain; charset=utf-8", "Not found", "no-store"], p);
+    assert.equal((await get(s, live.url)).status, 200);
+  } finally { await s.close(); }
+});
+
+test("share links are rate limited to 30 requests a minute per address", async () => {
+  const s = await setup();
+  try {
+    for (let i = 0; i < 30; i++) assert.equal((await get(s, "/s/" + "B".repeat(43))).status, 404);
+    const r = await get(s, "/s/" + "B".repeat(43));
+    assert.equal(r.status, 429);
+    assert.equal(r.headers.get("retry-after"), "60");
+    s.setClock("2026-10-20T10:01:00Z");
+    assert.equal((await get(s, "/s/" + "B".repeat(43))).status, 404);
+    assert.equal((await fetch(s.base + "/api/vault", { headers: s.auth })).status, 200); // the API is not limited
+  } finally { await s.close(); }
+});
+
+test("without a vault every share link is 404", async () => {
+  const first = await setup();
+  const { url } = (await first.share()).body;
+  await first.close();
+  const s = await start({ dataDir: first.dir });
+  try { assert.equal((await get(s, url)).status, 404); }
+  finally { await s.close(); }
+});

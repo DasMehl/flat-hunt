@@ -1,4 +1,5 @@
 // server.js — Flat Hunt: static page + JSON API. Data lives in DATA_DIR.
+const { publicShares } = require("./lib/share-public");
 const express = require("express");
 const fs = require("fs");
 const path = require("path");
@@ -64,6 +65,8 @@ function createApp(options = {}) {
   app.locals.fetchImpl = options.fetchImpl || globalThis.fetch;
   app.locals.vault = vault;
   app.disable("x-powered-by");
+  // Behind one reverse proxy (Railway), req.ip is the visitor's address; needed for the share-link rate limit.
+  if (options.trustProxy ?? process.env.TRUST_PROXY === "1") app.set("trust proxy", 1);
   app.use(express.json({ limit: "4mb" }));
   app.use((req, res, next) => {
     res.set("X-Content-Type-Options", "nosniff"); res.set("X-Frame-Options", "DENY"); res.set("Referrer-Policy", "strict-origin-when-cross-origin");
@@ -72,6 +75,9 @@ function createApp(options = {}) {
   });
 
   app.get("/healthz", (req, res) => res.type("text").send("ok"));
+
+  // Share links are public; everything registered after the password check is not.
+  app.use("/s", publicShares({ state, vault, persistShares, now, rateLimit: options.shareRateLimit }));
 
   if (password) {
     app.use((req, res, next) => {

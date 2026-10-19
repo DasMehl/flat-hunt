@@ -84,7 +84,6 @@ aside select { width: 100%; background: var(--surface); border: 1px solid var(--
 .panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); padding: 14px; min-width: 0; }
 #map { height: 360px; border-radius: 8px; background: var(--surface-2); }
 .leaflet-container { font: inherit; }
-.homepin { width: 14px; height: 14px; border-radius: 50%; background: var(--fg); border: 3px solid var(--surface); box-shadow: 0 0 0 2px var(--fg); }
 .placepin { width: 24px; height: 24px; border-radius: 6px; color: #fff; font: 700 12px/20px var(--display); text-align: center; border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,.4); }
 .leaflet-tooltip.placelabel { font-weight: 600; padding: 2px 6px; }
 .listpin { width: 26px; height: 26px; border-radius: 50%; color: #fff; font: 600 11px/26px var(--display); text-align: center; border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,.35); cursor: pointer; }
@@ -228,6 +227,8 @@ aside select { width: 100%; background: var(--surface); border: 1px solid var(--
 .hint { color: var(--muted); font-size: 12px; margin: 6px 0 0; }
 .warnline { color: var(--warn); font-size: 12.5px; font-weight: 600; margin: 6px 0 0; }
 .facts.afford { align-items: center; margin-top: 8px; font-size: 13px; }
+.hiddenline { margin: 0 0 4px; color: var(--muted); font-size: 13px; }
+.hiddenline .linkish { background: none; color: var(--accent); padding: 0; font-size: 13px; }
 .fsearch { width: 100%; padding: 8px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); }
 .dbody { border-top: 1px solid var(--line); display: grid; grid-template-columns: 1fr 1fr; }
 @media (max-width: 760px) { .dbody { grid-template-columns: 1fr; } }
@@ -455,14 +456,14 @@ body.setup .wrap{display:none}
       facts: "Facts", specs: { mode: "Rent or buy", warmRent: "Warm rent", coldRent: "Cold rent", utilities: "Utilities", deposit: "Deposit", takeover: "Takeover (furniture, kitchen)", price: "Price", ppsqm: "Price per m²", rooms: "Rooms", size: "Size", floor: "Floor", lift: "Lift", outdoor: "Outdoor space", kitchen: "Fitted kitchen", pets: "Pets allowed", available: "Available from", wbs: "Housing permit (WBS) needed", address: "Address", district: "District", source: "Source" },
       commuteH: "Commute", commuteCols: ["Place", "By", "Time", "Limit"], commuteNote: "Car and bike times from OpenStreetMap routing, public transport from Transitous for a weekday arriving by the place's time. Traffic is not included.", checked: d => `checked ${d}`,
       contactH: "Contact", costsH: "Costs", affordH: "Affordability",
-      rentMonthly: "Warm rent per month", coldPlus: (c, u) => `cold ${c} + utilities ${u}`, oneOff: "One-off", depositTakeover: "Deposit + takeover",
+      rentMonthly: "Warm rent per month", coldPlus: (c, u) => `cold ${c} + utilities ${u}`, oneOff: "One-off", depositTakeover: "Deposit + takeover", takeoverShort: "Takeover", unknown: "unknown", plusUnknown: "+ unknown", hiddenBy: n => `${n} hidden by your criteria or red flags.`, showThem: "Show them",
       price: "Price", transferTax: (st, p) => `Land-transfer tax (${st}, ${p} %)`, notary: "Notary and land registry (2 %)", agent: p => `Agent fee (${p} %)`, purchaseCosts: "Purchase costs", equity: "Equity", loan: "Loan", monthlyPay: (apr, y) => `Monthly payment (${apr} % over ${y} years)`, taxNote: d => `Land-transfer tax rates as of ${d}; check before buying.`,
       take: "Assessment", questions: "Questions to ask", rating: { price: "Price", size: "Size", commute: "Commute", area: "Area", condition: "Condition", contact: "Landlord / contact" },
       flagsH: "Red flags", conv: "Conversation", noMsgs: "No messages yet.", statusL: "Status", next: "Next step", nextPh: "e.g. send documents by Friday", notes: "My notes", notesPh: "Impressions from the viewing, questions, things to check…",
       logReply: "Log a reply", cancel: "Cancel", fromL: "From", via: "Via", vias: ["Phone", "Email", "Portal message", "WhatsApp", "In person"], said: "What they said", add: "Add to conversation",
       edit: "Edit details", del: "Delete listing", confirmDelete: t => `Delete “${t}”? This removes the listing, its notes and messages, and cannot be undone.`, saved: "Saved", saveFail: "Could not save", priceHist: "Price history", listing: "Listing", mapLink: "Map",
       crit: { mode: m => `${m} is switched off in Settings`, warm: (v, l) => `Warm rent ${v} is above your limit of ${l}`, cold: (v, l) => `Cold rent ${v} is above your limit of ${l}`, deposit: (v, l) => `Deposit ${v} is above your limit of ${l}`, takeover: (v, l) => `Takeover ${v} is above your limit of ${l}`, price: (v, l) => `Price ${v} is above your limit of ${l}`,
-        rooms: (v, r) => `${v} rooms, you want ${r}`, size: (v, r) => `${v}, you want ${r}`, floor: (v, r) => `Floor ${v}, you want ${r}`, lift: "No lift", outdoor: v => `Outdoor space: ${v}`, kitchen: "No fitted kitchen", pets: "Pets not allowed",
+        rooms: (v, r) => `${v} rooms, you want ${r}`, size: (v, r) => `${v}, you want ${r}`, floor: (v, r) => `${v}, you want ${r}`, lift: "No lift", outdoor: v => `Outdoor space: ${v}`, kitchen: "No fitted kitchen", pets: "Pets not allowed",
         moveinEarly: (d, f) => `Available from ${d}, before your move-in window starts on ${f}`, moveinLate: (d, t) => `Available from ${d}, after your move-in window ends on ${t}`, wbs: "Needs a housing permit (WBS)", commute: (l, m, max) => `${l}: ${m} min, your limit is ${max} min`, radius: (d, k) => `${d} km from your search centre, your radius is ${k} km` },
       range: (a, b) => b == null ? `at least ${a}` : a == null ? `at most ${b}` : `${a} to ${b}`,
       costTitle: "What will each flat cost?", costIntro: "Planning estimate. Choose up to six listings to compare.", costPick: "Listings to compare", reserve: "Maintenance reserve €/m² per month (buying)",
@@ -503,14 +504,14 @@ body.setup .wrap{display:none}
       facts: "Eckdaten", specs: { mode: "Miete oder Kauf", warmRent: "Warmmiete", coldRent: "Kaltmiete", utilities: "Nebenkosten", deposit: "Kaution", takeover: "Ablöse (Möbel, Küche)", price: "Kaufpreis", ppsqm: "Preis pro m²", rooms: "Zimmer", size: "Wohnfläche", floor: "Etage", lift: "Aufzug", outdoor: "Außenfläche", kitchen: "Einbauküche", pets: "Haustiere erlaubt", available: "Frei ab", wbs: "Wohnberechtigungsschein (WBS) nötig", address: "Adresse", district: "Stadtteil", source: "Quelle" },
       commuteH: "Wege", commuteCols: ["Ort", "Mit", "Zeit", "Grenze"], commuteNote: "Auto- und Radzeiten aus dem OpenStreetMap-Routing, ÖPNV von Transitous für einen Werktag mit Ankunft zur Uhrzeit des Ortes. Ohne Verkehr.", checked: d => `geprüft ${d}`,
       contactH: "Kontakt", costsH: "Kosten", affordH: "Bezahlbarkeit",
-      rentMonthly: "Warmmiete pro Monat", coldPlus: (c, u) => `kalt ${c} + Nebenkosten ${u}`, oneOff: "Einmalig", depositTakeover: "Kaution + Ablöse",
+      rentMonthly: "Warmmiete pro Monat", coldPlus: (c, u) => `kalt ${c} + Nebenkosten ${u}`, oneOff: "Einmalig", depositTakeover: "Kaution + Ablöse", takeoverShort: "Ablöse", unknown: "unbekannt", plusUnknown: "+ unbekannt", hiddenBy: n => `${n} durch deine Kriterien oder Warnzeichen ausgeblendet.`, showThem: "Anzeigen",
       price: "Kaufpreis", transferTax: (st, p) => `Grunderwerbsteuer (${st}, ${p} %)`, notary: "Notar und Grundbuch (2 %)", agent: p => `Maklerprovision (${p} %)`, purchaseCosts: "Kaufnebenkosten", equity: "Eigenkapital", loan: "Kredit", monthlyPay: (apr, y) => `Monatliche Rate (${apr} % über ${y} Jahre)`, taxNote: d => `Grunderwerbsteuersätze Stand ${d}; vor dem Kauf prüfen.`,
       take: "Einschätzung", questions: "Offene Fragen", rating: { price: "Preis", size: "Fläche", commute: "Wege", area: "Umgebung", condition: "Zustand", contact: "Vermieter / Kontakt" },
       flagsH: "Warnzeichen", conv: "Verlauf", noMsgs: "Noch keine Nachrichten.", statusL: "Status", next: "Nächster Schritt", nextPh: "z. B. Unterlagen bis Freitag schicken", notes: "Meine Notizen", notesPh: "Eindrücke von der Besichtigung, Fragen, was zu prüfen ist…",
       logReply: "Antwort eintragen", cancel: "Abbrechen", fromL: "Von", via: "Über", vias: ["Telefon", "E-Mail", "Portal-Nachricht", "WhatsApp", "Persönlich"], said: "Was gesagt wurde", add: "Zum Verlauf hinzufügen",
       edit: "Angaben bearbeiten", del: "Inserat löschen", confirmDelete: t => `„${t}“ löschen? Das entfernt das Inserat, seine Notizen und Nachrichten und lässt sich nicht rückgängig machen.`, saved: "Gespeichert", saveFail: "Speichern fehlgeschlagen", priceHist: "Preisverlauf", listing: "Inserat", mapLink: "Karte",
       crit: { mode: m => `${m} ist in den Einstellungen ausgeschaltet`, warm: (v, l) => `Warmmiete ${v} liegt über deiner Grenze von ${l}`, cold: (v, l) => `Kaltmiete ${v} liegt über deiner Grenze von ${l}`, deposit: (v, l) => `Kaution ${v} liegt über deiner Grenze von ${l}`, takeover: (v, l) => `Ablöse ${v} liegt über deiner Grenze von ${l}`, price: (v, l) => `Kaufpreis ${v} liegt über deiner Grenze von ${l}`,
-        rooms: (v, r) => `${v} Zimmer, gewünscht ${r}`, size: (v, r) => `${v}, gewünscht ${r}`, floor: (v, r) => `Etage ${v}, gewünscht ${r}`, lift: "Kein Aufzug", outdoor: v => `Außenfläche: ${v}`, kitchen: "Keine Einbauküche", pets: "Haustiere nicht erlaubt",
+        rooms: (v, r) => `${v} Zimmer, gewünscht ${r}`, size: (v, r) => `${v}, gewünscht ${r}`, floor: (v, r) => `${v}, gewünscht ${r}`, lift: "Kein Aufzug", outdoor: v => `Außenfläche: ${v}`, kitchen: "Keine Einbauküche", pets: "Haustiere nicht erlaubt",
         moveinEarly: (d, f) => `Frei ab ${d}, vor dem Beginn deines Einzugszeitraums am ${f}`, moveinLate: (d, t) => `Frei ab ${d}, nach dem Ende deines Einzugszeitraums am ${t}`, wbs: "Nur mit Wohnberechtigungsschein (WBS)", commute: (l, m, max) => `${l}: ${m} Min., deine Grenze ist ${max} Min.`, radius: (d, k) => `${d} km vom Suchmittelpunkt, dein Radius ist ${k} km` },
       range: (a, b) => b == null ? `mindestens ${a}` : a == null ? `höchstens ${b}` : `${a} bis ${b}`,
       costTitle: "Was kostet jede Wohnung?", costIntro: "Planungsrechnung. Bis zu sechs Inserate zum Vergleich auswählen.", costPick: "Inserate vergleichen", reserve: "Instandhaltungsrücklage €/m² pro Monat (Kauf)",
@@ -551,14 +552,14 @@ body.setup .wrap{display:none}
       facts: "Dados", specs: { mode: "Alugar ou comprar", warmRent: "Aluguel total", coldRent: "Aluguel sem custos", utilities: "Custos adicionais", deposit: "Caução", takeover: "Repasse (móveis, cozinha)", price: "Preço", ppsqm: "Preço por m²", rooms: "Cômodos", size: "Área", floor: "Andar", lift: "Elevador", outdoor: "Área externa", kitchen: "Cozinha equipada", pets: "Aceita animais", available: "Disponível a partir de", wbs: "Exige autorização de habitação social (WBS)", address: "Endereço", district: "Bairro", source: "Origem" },
       commuteH: "Trajetos", commuteCols: ["Local", "Por", "Tempo", "Limite"], commuteNote: "Tempos de carro e bicicleta pelo roteamento do OpenStreetMap, transporte público pelo Transitous num dia útil com chegada no horário do local. Sem trânsito.", checked: d => `verificado em ${d}`,
       contactH: "Contato", costsH: "Custos", affordH: "Capacidade de pagamento",
-      rentMonthly: "Aluguel total por mês", coldPlus: (c, u) => `aluguel ${c} + custos ${u}`, oneOff: "Pagamento único", depositTakeover: "Caução + repasse",
+      rentMonthly: "Aluguel total por mês", coldPlus: (c, u) => `aluguel ${c} + custos ${u}`, oneOff: "Pagamento único", depositTakeover: "Caução + repasse", takeoverShort: "Repasse", unknown: "desconhecido", plusUnknown: "+ desconhecido", hiddenBy: n => `${n} ocultos pelos seus critérios ou sinais de alerta.`, showThem: "Mostrar",
       price: "Preço", transferTax: (st, p) => `Imposto de transmissão (${st}, ${p} %)`, notary: "Cartório e registro (2 %)", agent: p => `Comissão do corretor (${p} %)`, purchaseCosts: "Custos de compra", equity: "Entrada", loan: "Financiamento", monthlyPay: (apr, y) => `Parcela mensal (${apr} % em ${y} anos)`, taxNote: d => `Alíquotas do imposto de transmissão de ${d}; confira antes de comprar.`,
       take: "Avaliação", questions: "Perguntas a fazer", rating: { price: "Preço", size: "Área", commute: "Trajeto", area: "Região", condition: "Estado", contact: "Proprietário / contato" },
       flagsH: "Sinais de alerta", conv: "Conversa", noMsgs: "Nenhuma mensagem ainda.", statusL: "Status", next: "Próximo passo", nextPh: "ex.: enviar documentos até sexta", notes: "Minhas anotações", notesPh: "Impressões da visita, perguntas, o que verificar…",
       logReply: "Registrar resposta", cancel: "Cancelar", fromL: "De", via: "Por", vias: ["Telefone", "E-mail", "Mensagem no portal", "WhatsApp", "Pessoalmente"], said: "O que disseram", add: "Adicionar à conversa",
       edit: "Editar dados", del: "Excluir anúncio", confirmDelete: t => `Excluir “${t}”? Isso remove o anúncio, suas anotações e mensagens, e não pode ser desfeito.`, saved: "Salvo", saveFail: "Não foi possível salvar", priceHist: "Histórico de preço", listing: "Anúncio", mapLink: "Mapa",
       crit: { mode: m => `${m} está desativado nas Configurações`, warm: (v, l) => `Aluguel total ${v} acima do seu limite de ${l}`, cold: (v, l) => `Aluguel sem custos ${v} acima do seu limite de ${l}`, deposit: (v, l) => `Caução ${v} acima do seu limite de ${l}`, takeover: (v, l) => `Repasse ${v} acima do seu limite de ${l}`, price: (v, l) => `Preço ${v} acima do seu limite de ${l}`,
-        rooms: (v, r) => `${v} cômodos, você quer ${r}`, size: (v, r) => `${v}, você quer ${r}`, floor: (v, r) => `Andar ${v}, você quer ${r}`, lift: "Sem elevador", outdoor: v => `Área externa: ${v}`, kitchen: "Sem cozinha equipada", pets: "Não aceita animais",
+        rooms: (v, r) => `${v} cômodos, você quer ${r}`, size: (v, r) => `${v}, você quer ${r}`, floor: (v, r) => `${v}, você quer ${r}`, lift: "Sem elevador", outdoor: v => `Área externa: ${v}`, kitchen: "Sem cozinha equipada", pets: "Não aceita animais",
         moveinEarly: (d, f) => `Disponível a partir de ${d}, antes do início do seu período de mudança em ${f}`, moveinLate: (d, t) => `Disponível a partir de ${d}, depois do fim do seu período de mudança em ${t}`, wbs: "Exige autorização de habitação social (WBS)", commute: (l, m, max) => `${l}: ${m} min, seu limite é ${max} min`, radius: (d, k) => `${d} km do centro da busca, seu raio é ${k} km` },
       range: (a, b) => b == null ? `pelo menos ${a}` : a == null ? `no máximo ${b}` : `${a} a ${b}`,
       costTitle: "Quanto custa cada apartamento?", costIntro: "Estimativa de planejamento. Escolha até seis anúncios para comparar.", costPick: "Anúncios para comparar", reserve: "Reserva de manutenção €/m² por mês (compra)",
@@ -577,6 +578,7 @@ body.setup .wrap{display:none}
   const el = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
   const esc = s => String(s ?? "").replace(/[&<>"]/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[ch]);
   const known = v => v !== undefined && v !== null && v !== "";
+  const cap = s => String(s).charAt(0).toUpperCase() + String(s).slice(1);
 
   let lang = "en"; try { const l = localStorage.getItem("flathunt-lang"); if (I18N[l]) lang = l; } catch (e) {}
   if (I18N[location.hash.slice(1)]) lang = location.hash.slice(1);
@@ -600,11 +602,14 @@ body.setup .wrap{display:none}
   const headPrice = c => c.mode === "buy" ? (known(c.price) ? c.price : null) : (warmOf(c) ?? (known(c.coldRent) ? c.coldRent : null));
   // Monthly housing cost used for affordability: warm rent, or the loan payment when buying.
   const monthlyOf = c => c.mode === "buy" ? (known(c.price) ? Money.buyMonthly(c.price, P).monthly : null) : warmOf(c);
-  const placeMin = (c, i) => { const x = (c.commute || [])[i]; return x && known(x.minutes) ? x.minutes : null; };
+  // Commute arrays can be longer than the current places (a place was removed and the times not yet recalculated).
+  const placeMin = (c, i) => { if (!P || i >= (P.places || []).length) return null; const x = (c.commute || [])[i]; return x && known(x.minutes) ? x.minutes : null; };
   const firstMin = c => placeMin(c, 0);
   const titleOf = c => tf(c, "title") || c.title || c.id;
   const addressLine = c => { const town = [c.postcode, c.city].filter(Boolean).join(" "); const a = String(c.address || ""); return [a, town && !a.includes(c.city || "\u0000") ? town : "", c.district].filter(Boolean).join(" · "); };
-  const priceCls = c => { const v = headPrice(c); if (v == null) return ""; const lim = c.mode === "buy" ? P.buy.maxPrice : P.rent.maxWarm; return v <= lim ? "good" : v <= lim * 1.1 ? "warn" : "bad"; };
+  // Amount compared with the limits: purchase price, or warm rent (cold rent alone is not compared with the warm-rent limit).
+  const limPrice = c => c.mode === "buy" ? (known(c.price) ? c.price : null) : warmOf(c);
+  const priceCls = c => { const v = limPrice(c); if (v == null) return ""; const lim = c.mode === "buy" ? P.buy.maxPrice : P.rent.maxWarm; return v <= lim ? "good" : v <= lim * 1.1 ? "warn" : "bad"; };
 
   let listings = [], raw = {}, meta = { lastCheck: null, log: [] };
   const expanded = new Set(); if (location.hash.startsWith("#listing-")) expanded.add(location.hash.slice(9));
@@ -637,7 +642,7 @@ body.setup .wrap{display:none}
       case "price": return c.price(eur(r.value), eur(P.buy.maxPrice));
       case "rooms": return c.rooms(nf(r.value, 1), T.range(nf(f.roomsMin, 1), f.roomsMax == null ? null : nf(f.roomsMax, 1)));
       case "size": return c.size(sqm(r.value), T.range(sqm(f.sizeMin), f.sizeMax == null ? null : sqm(f.sizeMax)));
-      case "floor": return c.floor(r.value, T.range(f.floorMin, f.floorMax));
+      case "floor": return c.floor(cap(T.floor(r.value)), T.range(f.floorMin == null ? null : T.floor(f.floorMin), f.floorMax == null ? null : T.floor(f.floorMax)));
       case "lift": return c.lift;
       case "outdoor": return c.outdoor(T.outdoor[r.value] || r.value);
       case "kitchen": return c.kitchen;
@@ -655,18 +660,18 @@ body.setup .wrap{display:none}
   const flagReason = d => (d.reason && (d.reason[lang] || d.reason.en)) || "";
 
   // ---------- filtering & sorting ----------
-  function matches(c) {
+  function matches(c, skipCriteria) {
     if (F.query) { const hay = [titleOf(c), c.address, c.postcode, c.city, c.district, c.contact && c.contact.name].filter(Boolean).join(" ").toLocaleLowerCase(); if (!hay.includes(F.query.trim().toLocaleLowerCase())) return false; }
     if (F.savedOnly && !c.pick) return false;
     if (F.statuses.size && !F.statuses.has(c.status)) return false;
     if (bothModes() && F.mode !== "all" && c.mode !== F.mode) return false;
-    const hp = headPrice(c);
+    const hp = limPrice(c);
     if (c.mode === "rent" && hp != null && F.maxWarm < DEF.maxWarm && hp > F.maxWarm) return false;
     if (c.mode === "buy" && hp != null && F.maxPrice < DEF.maxPrice && hp > F.maxPrice) return false;
     if (F.minRooms && known(c.rooms) && c.rooms < F.minRooms) return false;
     if (F.minSize && known(c.size) && c.size < F.minSize) return false;
     if (F.hideOut && isOut(c)) return false;
-    if (F.inCriteria && c._crit.length && c.status !== "accepted") return false;
+    if (!skipCriteria && F.inCriteria && c._crit.length && c.status !== "accepted") return false;
     return true;
   }
   const NONE = Number.POSITIVE_INFINITY;
@@ -677,10 +682,10 @@ body.setup .wrap{display:none}
     const rec = (a, b) => (tier(a) - tier(b)) || ((b.score ?? -1) - (a.score ?? -1)) || ((firstMin(a) ?? NONE) - (firstMin(b) ?? NONE)) || ((STATUS_RANK[a.status] ?? 5) - (STATUS_RANK[b.status] ?? 5)) || String(b.addedAt || "").localeCompare(String(a.addedAt || ""));
     const asc = f => (a, b) => (f(a) ?? NONE) - (f(b) ?? NONE);
     if (k === "score") c.sort((a, b) => (b.score ?? -1) - (a.score ?? -1));
-    else if (k === "price") c.sort((a, b) => (a.mode === b.mode ? 0 : a.mode === "rent" ? -1 : 1) || asc(headPrice)(a, b));
+    else if (k === "price") c.sort((a, b) => (a.mode === b.mode ? 0 : a.mode === "rent" ? -1 : 1) || asc(limPrice)(a, b));
     else if (k === "ppsqm") c.sort((a, b) => (a.mode === b.mode ? 0 : a.mode === "rent" ? -1 : 1) || asc(Criteria.pricePerSqm)(a, b));
     else if (k === "size") c.sort((a, b) => (b.size ?? -1) - (a.size ?? -1));
-    else if (k === "commute") c.sort(asc(firstMin));
+    else if (k === "commute" && (P.places || []).length) c.sort(asc(firstMin));
     else if (k === "newest") c.sort((a, b) => String(b.addedAt || "").localeCompare(String(a.addedAt || "")));
     else c.sort(rec);
     return c;
@@ -699,9 +704,12 @@ body.setup .wrap{display:none}
       const equityUsed = Math.min(P.buy.equity, c.price + pc.total);
       return { parts: [["loan", T.loanPart, bm.monthly], ["reserve", T.reservePart, reserve]], total: bm.monthly + reserve, oneOff: pc.total + equityUsed, oneOffTxt: `${T.purchaseCosts} ${eur(pc.total)} + ${T.equity} ${eur(equityUsed)}` };
     }
-    const w = warmOf(c), dep = known(c.deposit) ? c.deposit : 0, tk = known(c.takeover) ? c.takeover : 0;
-    return { parts: w == null ? [] : [["rent", T.rentPart, w]], total: w, oneOff: dep + tk, oneOffTxt: `${T.specs.deposit} ${eur(dep)} + ${T.specs.takeover.split(" (")[0]} ${eur(tk)}` };
+    const w = warmOf(c), o = rentOneOff(c);
+    return { parts: w == null ? [] : [["rent", T.rentPart, w]], total: w, oneOff: o.sum, oneOffUnknown: o.unknown, oneOffTxt: `${T.specs.deposit} ${known(c.deposit) ? eur(c.deposit) : T.unknown} + ${T.takeoverShort} ${known(c.takeover) ? eur(c.takeover) : T.unknown}` };
   }
+  // Deposit + takeover; unknown parts are left out of the sum and flagged.
+  const rentOneOff = c => { const parts = [c.deposit, c.takeover]; const k = parts.filter(known); return { sum: k.length ? k.reduce((a, b) => a + b, 0) : null, unknown: k.length < parts.length }; };
+  const oneOffText = (sum, unknown) => sum == null ? T.unknown : eur(sum) + (unknown ? " " + T.plusUnknown : "");
   const limitMonthly = () => P.money.netIncome ? P.money.netIncome * P.money.affordShare : null;
   function renderCosts(list) {
     const host = $("#costs"); host.innerHTML = "";
@@ -728,7 +736,7 @@ body.setup .wrap{display:none}
       if (limit) { const ln = el("span", "cost-limit"); ln.style.left = (limit / max * 100) + "%"; barwrap.append(ln); }
       graph.append(barwrap, el("div", "cost-detail", [...r.parts.map(([, label, v]) => `${label} ${eur(Math.round(v))}`), `${T.oneOff}: ${r.oneOffTxt}`].join(" · ")));
       const total = el("div", "cost-total", r.total == null ? "–" : `${eur(Math.round(r.total))}${T.perMonth}`);
-      total.append(el("small", null, `${T.oneOff} ${eur(r.oneOff)}`), affordChip(r.c));
+      total.append(el("small", null, `${T.oneOff} ${oneOffText(r.oneOff, r.oneOffUnknown)}`), affordChip(r.c));
       row.append(name, graph, total); wrap.append(row);
     });
     host.append(wrap);
@@ -833,10 +841,10 @@ body.setup .wrap{display:none}
     tile(String(list.length), T.kpiMatch, T.tracked(listings.length));
     const best = [...list].filter(c => c.score != null).sort((a, b) => b.score - a.score)[0];
     if (best) estTitle(tile(scoreTxt(best), T.kpiBest, titleOf(best), () => openListing(best.id)), best);
-    modesOn().forEach(m => { const cheap = list.filter(c => c.mode === m && headPrice(c) != null).sort((a, b) => headPrice(a) - headPrice(b))[0]; if (cheap) tile(eur(headPrice(cheap)), m === "buy" ? T.kpiCheapBuy : T.kpiCheapRent, titleOf(cheap), () => openListing(cheap.id)); });
+    modesOn().forEach(m => { const cheap = list.filter(c => c.mode === m && limPrice(c) != null).sort((a, b) => limPrice(a) - limPrice(b))[0]; if (cheap) tile(eur(limPrice(cheap)), m === "buy" ? T.kpiCheapBuy : T.kpiCheapRent, titleOf(cheap), () => openListing(cheap.id)); });
     const big = list.filter(c => c.size > 0).sort((a, b) => b.size - a.size)[0];
     if (big) tile(sqm(big.size), T.kpiLargest, titleOf(big), () => openListing(big.id));
-    const near = list.filter(c => firstMin(c) != null).sort((a, b) => firstMin(a) - firstMin(b))[0];
+    const near = (P.places || []).length ? list.filter(c => firstMin(c) != null).sort((a, b) => firstMin(a) - firstMin(b))[0] : null;
     if (near) tile(nf(firstMin(near)) + " " + T.min, T.kpiCommute(P.places[0].label), titleOf(near), () => openListing(near.id));
   }
 
@@ -886,7 +894,7 @@ body.setup .wrap{display:none}
       const dim = !vis.has(c.id);
       const m = L.marker([c.lat, c.lon], { icon: L.divIcon({ className: "", html: `<div class="listpin${dim ? " dim" : ""}" style="background:${scoreHex(c.score)}">${c.score ?? ""}</div>`, iconSize: [26, 26], iconAnchor: [13, 13] }), zIndexOffset: dim ? 0 : 500 });
       const cm = places.map((p, i) => placeMin(c, i) == null ? `${p.label} ?` : `${p.label} ${placeMin(c, i)} ${T.min}`).join(" · ");
-      m.bindTooltip(`${esc(titleOf(c))}<br>${esc(eur(headPrice(c)))}${c.size ? " · " + esc(sqm(c.size)) : ""}${cm ? "<br>" + esc(cm) : ""}`);
+      m.bindTooltip(`${esc(titleOf(c))}<br>${esc(limPrice(c) != null ? eur(limPrice(c)) : headPrice(c) != null ? eur(headPrice(c)) + " " + T.cold : T.noPrice)}${c.size ? " · " + esc(sqm(c.size)) : ""}${cm ? "<br>" + esc(cm) : ""}`);
       m.on("click", () => openListing(c.id)); markers.addLayer(m);
     });
     const lg = $("#maplegend"); lg.innerHTML = `<span><i style="background:#1d7a4b"></i>${esc(T.scoreHigh)}</span><span><i style="background:#c07d13"></i>${esc(T.scoreMid)}</span><span><i style="background:#b4393b"></i>${esc(T.scoreLow)}</span>`;
@@ -904,12 +912,12 @@ body.setup .wrap{display:none}
     const cm = $("#chartmode"); cm.innerHTML = ""; cm.hidden = modes.length < 2;
     if (modes.length > 1) modes.forEach(m => { const b = el("button", "chip", T.mode[m]); b.type = "button"; b.setAttribute("aria-pressed", chartMode === m); b.onclick = () => { chartMode = m; renderChart(visible()); }; cm.append(b); });
     const vis = new Set(list.map(c => c.id));
-    const pts = listings.filter(c => c.mode === chartMode && c.size > 0 && headPrice(c) != null);
+    const pts = listings.filter(c => c.mode === chartMode && c.size > 0 && limPrice(c) != null);
     const ch = $("#chart");
     if (!pts.length) { ch.innerHTML = ""; ch.append(el("p", "empty", T.noChart)); $("#chartlegend").innerHTML = ""; return; }
     const W = 600, H = 360, PAD = { l: 64, r: 16, t: 14, b: 34 };
     const limit = chartMode === "buy" ? P.buy.maxPrice : P.rent.maxWarm;
-    const xs = pts.map(c => c.size), ys = pts.map(headPrice);
+    const xs = pts.map(c => c.size), ys = pts.map(limPrice);
     const xStep = niceStep(Math.max(10, (Math.max(...xs) - Math.min(...xs)) / 5)), yStep = niceStep(Math.max(chartMode === "buy" ? 10000 : 50, (Math.max(...ys, limit) - Math.min(...ys)) / 5));
     const x0 = Math.floor(Math.min(...xs) / xStep) * xStep, x1 = Math.max(x0 + xStep, Math.ceil(Math.max(...xs) / xStep) * xStep);
     const y0 = Math.floor(Math.min(...ys) / yStep) * yStep, y1 = Math.max(y0 + yStep, Math.ceil(Math.max(...ys, limit * 1.05) / yStep) * yStep);
@@ -920,7 +928,7 @@ body.setup .wrap{display:none}
     for (let v = y0; v <= y1 + 1e-9; v += yStep) s += `<line class="grid" x1="${PAD.l}" y1="${Y(v)}" x2="${W - PAD.r}" y2="${Y(v)}"/><text x="${PAD.l - 6}" y="${Y(v) + 4}" text-anchor="end">${esc(yLab(v))}</text>`;
     const limLabel = chartMode === "buy" ? T.limitBuy : T.limitRent;
     s += `<line class="budget" x1="${PAD.l}" y1="${Y(limit)}" x2="${W - PAD.r}" y2="${Y(limit)}"/><text x="${W - PAD.r}" y="${Y(limit) - 4}" text-anchor="end">${esc(limLabel)} ${esc(eur(limit))}</text>`;
-    sortListings(pts).reverse().forEach(c => { const dim = !vis.has(c.id); s += `<circle class="pt${dim ? " dim" : ""}" data-id="${esc(c.id)}" cx="${X(c.size)}" cy="${Y(headPrice(c))}" r="${dim ? 5 : 8}" fill="${scoreHex(c.score)}"><title>${esc(titleOf(c))} · ${esc(eur(headPrice(c)))} · ${esc(sqm(c.size))} · ${c.score ?? ""}</title></circle>`; });
+    sortListings(pts).reverse().forEach(c => { const dim = !vis.has(c.id); s += `<circle class="pt${dim ? " dim" : ""}" data-id="${esc(c.id)}" cx="${X(c.size)}" cy="${Y(limPrice(c))}" r="${dim ? 5 : 8}" fill="${scoreHex(c.score)}"><title>${esc(titleOf(c))} · ${esc(eur(limPrice(c)))} · ${esc(sqm(c.size))} · ${c.score ?? ""}</title></circle>`; });
     s += "</svg>";
     ch.innerHTML = s;
     ch.querySelectorAll(".pt").forEach(p => p.onclick = () => openListing(p.dataset.id));
@@ -976,8 +984,7 @@ body.setup .wrap{display:none}
     if (bothModes()) h.append(el("span", "ctype", T.mode[c.mode] || c.mode));
     if (c.contact && T.contactType[c.contact.type]) h.append(el("span", "ctype" + (c.contact.type === "private" ? " p" : ""), T.contactType[c.contact.type]));
     if (c.gone) h.append(el("span", "tag gone", T.gone));
-    const crit = c._crit.filter(r => r.key !== "flag");
-    if (crit.length) { const t = el("span", "tag out", T.outside); t.title = crit.map(r => critText({ ...r, listing: c })).join(" · "); h.append(t); }
+    if (c._crit.length) { const t = el("span", "tag out", T.outside); t.title = c._crit.map(r => critText({ ...r, listing: c })).join(" · "); h.append(t); }
     if (c._flags.length) { const t = el("span", "tag flag", "⚠ " + T.redFlag(c._flags.length)); t.title = c._flags.map(d => flagLabel(d) + (flagReason(d) ? ": " + flagReason(d) : "")).join("\n"); h.append(t); }
     const l2 = el("div", "line2", addressLine(c));
     const facts = el("div", "facts");
@@ -1068,12 +1075,12 @@ body.setup .wrap{display:none}
       if (known(c.price)) {
         const pc = Money.purchaseCosts(c.price, P), bm = Money.buyMonthly(c.price, P), st = P.buy.state;
         specRow(cdl, T.price, eur(c.price)); specRow(cdl, T.transferTax(st, nf(Money.TRANSFER_TAX[st] || 0, 1)), eur(pc.transferTax)); specRow(cdl, T.notary, eur(pc.notary)); specRow(cdl, T.agent(nf(P.buy.agentFeePct, 2)), eur(pc.agent));
-        specRow(cdl, T.purchaseCosts, eur(pc.total)); specRow(cdl, T.equity, eur(P.buy.equity)); specRow(cdl, T.loan, eur(bm.loan)); specRow(cdl, T.monthlyPay(nf(P.buy.apr, 2), P.buy.years), eur(Math.round(bm.monthly)));
+        specRow(cdl, T.purchaseCosts, eur(pc.total)); specRow(cdl, T.equity, eur(Math.min(P.buy.equity, c.price + pc.total))); specRow(cdl, T.loan, eur(bm.loan)); specRow(cdl, T.monthlyPay(nf(P.buy.apr, 2), P.buy.years), eur(Math.round(bm.monthly)));
       }
       left.append(cdl, el("p", "hint", T.taxNote(Money.TRANSFER_TAX_CHECKED)));
     } else {
       specRow(cdl, T.rentMonthly, w != null ? eur(w) + (known(c.coldRent) && known(c.utilities) ? " (" + T.coldPlus(eur(c.coldRent), eur(c.utilities)) + ")" : "") : null);
-      specRow(cdl, `${T.oneOff}: ${T.depositTakeover}`, eur((known(c.deposit) ? c.deposit : 0) + (known(c.takeover) ? c.takeover : 0)));
+      const o = rentOneOff(c); specRow(cdl, `${T.oneOff}: ${T.depositTakeover}`, oneOffText(o.sum, o.unknown));
       left.append(cdl);
     }
     const af = el("div", "facts afford"); af.append(el("span", "muted", T.affordH + ": "), affordChip(c)); left.append(af);
@@ -1112,13 +1119,18 @@ body.setup .wrap{display:none}
   function renderList(list) {
     const host = $("#cards"); host.innerHTML = "";
     $("#count").textContent = T.count(list.length, listings.length);
+    // Listings that only the criteria filter (limits or red flags) hides, with a one-click way to show them.
+    if (F.inCriteria) {
+      const hiddenN = listings.filter(c => !matches(c) && matches(c, true)).length;
+      if (hiddenN) { const p = el("p", "hiddenline", T.hiddenBy(hiddenN) + " "); const b = el("button", "linkish", T.showThem); b.type = "button"; b.onclick = () => { F.inCriteria = false; saveF(); render(); }; p.append(b); host.append(p); }
+    }
     if (!list.length) { host.append(el("p", "empty", T.noMatch)); return; }
     list.forEach(c => host.append(card(c)));
   }
   function renderTable() {
     const t = $("#cmp"); t.innerHTML = "";
     const keys = ["title", "score", "mode", "price", "ppsqm", "rooms", "size", "floor", "available", "commute", "afford", "status"];
-    const val = (c, k) => k === "title" ? titleOf(c) : k === "mode" ? c.mode : k === "price" ? headPrice(c) : k === "ppsqm" ? Criteria.pricePerSqm(c) : k === "available" ? (c.availableFrom || "") : k === "commute" ? firstMin(c) : k === "afford" ? c._afford.share : k === "status" ? (STATUS_RANK[c.status] ?? 5) : c[k];
+    const val = (c, k) => k === "title" ? titleOf(c) : k === "mode" ? c.mode : k === "price" ? limPrice(c) : k === "ppsqm" ? Criteria.pricePerSqm(c) : k === "available" ? (c.availableFrom || "") : k === "commute" ? firstMin(c) : k === "afford" ? c._afford.share : k === "status" ? (STATUS_RANK[c.status] ?? 5) : c[k];
     const rows = costSelected.map(id => listings.find(c => c.id === id)).filter(Boolean).sort((a, b) => { const x = val(a, tableSort.k), y = val(b, tableSort.k); if (x == null || y == null) return (x == null) - (y == null); return (typeof x === "string" ? x.localeCompare(y) : x - y) * tableSort.dir; });
     const thead = el("thead"); const hr = el("tr"); const numCols = [1, 3, 4, 5, 6, 7, 9];
     T.cols.forEach((h, i) => { if (i === 9 && !(P.places || []).length) return; const th = el("th", (numCols.includes(i) ? "num" : "") + (tableSort.k === keys[i] ? " sorted" : ""), h + (i === 9 ? " · " + P.places[0].label : "") + (tableSort.k === keys[i] ? (tableSort.dir > 0 ? " ↑" : " ↓") : "")); th.onclick = () => { if (tableSort.k === keys[i]) tableSort.dir *= -1; else tableSort = { k: keys[i], dir: keys[i] === "score" ? -1 : 1 }; renderTable(); }; hr.append(th); });
@@ -1126,7 +1138,7 @@ body.setup .wrap{display:none}
     rows.forEach(c => { const tr = el("tr"); const td0 = el("td"); const a = el("a", null, titleOf(c)); a.href = "#listing-" + c.id; a.onclick = e => { e.preventDefault(); openListing(c.id); }; td0.append(a); if (c.pick) td0.append(document.createTextNode(" ✓")); tr.append(td0);
       const ts = el("td", "num"); ts.append(estTitle(el("span", "sc", scoreTxt(c)), c)); ts.firstChild.style.color = scoreColor(c.score); tr.append(ts);
       const pps = Criteria.pricePerSqm(c), fm = firstMin(c);
-      tr.append(el("td", null, T.mode[c.mode] || ""), el("td", "num " + priceCls(c), eur(headPrice(c))), el("td", "num", pps != null ? eurSqm(pps) : "–"), el("td", "num", known(c.rooms) ? nf(c.rooms, 1) : "–"), el("td", "num", c.size ? nf(c.size, 1) : "–"), el("td", "num", known(c.floor) ? String(c.floor) : "–"), el("td", null, c.availableFrom ? fmtDate(c.availableFrom) : "–"));
+      tr.append(el("td", null, T.mode[c.mode] || ""), el("td", "num " + priceCls(c), eur(limPrice(c))), el("td", "num", pps != null ? eurSqm(pps) : "–"), el("td", "num", known(c.rooms) ? nf(c.rooms, 1) : "–"), el("td", "num", c.size ? nf(c.size, 1) : "–"), el("td", "num", known(c.floor) ? String(c.floor) : "–"), el("td", null, c.availableFrom ? fmtDate(c.availableFrom) : "–"));
       if ((P.places || []).length) tr.append(el("td", "num" + (fm != null && fm > P.places[0].maxMin ? " bad" : ""), fm == null ? "?" : `${nf(fm)} ${T.min}`));
       const ta = el("td"); ta.append(affordChip(c)); tr.append(ta);
       const tds = el("td"); tds.append(el("span", "pill s-" + c.status, T.status[c.status] || c.status)); tr.append(tds); tb.append(tr); });

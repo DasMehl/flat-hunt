@@ -341,11 +341,13 @@ dialog.sx::backdrop { background: rgba(0, 0, 0, .35); }
 .sx .opts { display: flex; flex-wrap: wrap; gap: 6px 14px; }
 .sx .opts label { display: flex; gap: 6px; align-items: center; }
 .sx input[type=checkbox], .sx input[type=radio], .sx input[type=range] { accent-color: var(--accent); }
-.sx input[type=text], .sx input[type=number], .sx input[type=url], .sx select, .sx textarea { padding: 8px 10px; min-height: 40px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--fg); width: 100%; min-width: 0; }
+.sx input[type=text], .sx input[type=number], .sx input[type=url], .sx input[type=date], .sx input[type=time], .sx select, .sx textarea { padding: 8px 10px; min-height: 40px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--fg); width: 100%; min-width: 0; }
 .sx .frow { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; align-items: end; }
 .sx .addr { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
 .sx .grp { display: grid; gap: 10px; }
 .sx .sub { display: grid; gap: 10px; padding-left: 12px; border-left: 2px solid var(--line); }
+.sx .places { display: grid; gap: 10px; }
+.sx .place { display: grid; gap: 10px; padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-2); }
 .sx .intro { margin: 0; color: var(--fg); background: var(--surface-2); border-radius: 8px; padding: 10px 12px; font-size: 14px; }
 .sx .weight .wl { display: flex; justify-content: space-between; gap: 8px; }
 .sx .weight .wv { font-weight: 600; font-variant-numeric: tabular-nums; min-width: 2.5ch; text-align: right; }
@@ -751,8 +753,7 @@ body.setup .wrap{display:none}
 
   // ---------- header ----------
   const openSettings = () => Setup.open({ mode: "settings", lang, onSaved: () => load() });
-  // setup.js gets addListing/editListing in the next step; until then the old dialog names are used.
-  const addListing = () => (Setup.addListing || Setup.addCar)({ lang, onSaved: () => load() });
+  const addListing = () => Setup.addListing({ lang, onSaved: () => load() });
   const scoreTxt = c => c.score == null ? "–" : (c.scoreEstimated ? "≈" : "") + c.score;
   const estTitle = (node, c) => { if (c && c.scoreEstimated) node.title = T.estTip; return node; };
   // First run: no listings yet. A welcome card replaces the panels that need data.
@@ -1110,7 +1111,7 @@ body.setup .wrap{display:none}
     const sb = el("button", "btn primary", T.add); sb.type = "button"; sb.onclick = () => { if (!tx.value.trim()) { tx.focus(); return; } const patch = { messages: [...(c.messages || []), { date: new Date().toISOString(), dir: "in", from: fi.value || (c.contact && c.contact.name) || "", via: vi.value, text: tx.value.trim() }] }; openReply[c.id] = false; save(c.id, patch, note); };
     form.append(fr, tW, sb); rb.onclick = () => { openReply[c.id] = !openReply[c.id]; form.classList.toggle("open", openReply[c.id]); rb.textContent = openReply[c.id] ? T.cancel : T.logReply; if (openReply[c.id]) tx.focus(); };
     const acts = el("div", "lactions");
-    const eb = el("button", "btn", T.edit); eb.type = "button"; eb.onclick = () => (Setup.editListing || Setup.editCar)({ listing: c, car: c, lang, onSaved: () => { expanded.add(c.id); load(); } });
+    const eb = el("button", "btn", T.edit); eb.type = "button"; eb.onclick = () => Setup.editListing({ listing: c, lang, onSaved: () => { expanded.add(c.id); load(); } });
     const db = el("button", "btn danger", T.del); db.type = "button"; db.onclick = () => removeListing(c, note);
     acts.append(eb, db);
     ctr.append(rb, form, note, acts); right.append(ctr); body.append(right); d.append(body);
@@ -1211,8 +1212,8 @@ body.setup .wrap{display:none}
     try { const [r1, r2] = await Promise.all([fetch("/api/listings", { cache: "no-store" }), fetch("/api/meta", { cache: "no-store" })]); if (r1.ok) { raw = (await r1.json()).listings || {}; listings = toList(raw); if (r2.ok) meta = await r2.json(); render(); } } catch (e) {}
   }
   load();
-  // setup.js reads the profile through window.CarHunt until its rewrite; both names point at the same object.
-  window.FlatHunt = window.CarHunt = { profile: () => P, catalogue: () => CAT, lang: () => lang, reload: () => load() };
+  // setup.js reads the profile through window.FlatHunt.
+  window.FlatHunt = { profile: () => P, catalogue: () => CAT, lang: () => lang, reload: () => load() };
   // Remember this visit for the "new since" badge, but only after the data arrived once.
   setTimeout(() => { try { if (listings.length) localStorage.setItem("flathunt-lastvisit", lastVisit ? lastVisit : new Date().toISOString()); } catch (e) {} }, 4000);
 })();

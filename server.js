@@ -26,7 +26,7 @@ function createApp(options = {}) {
   const password = options.password ?? process.env.SITE_PASSWORD ?? "";
   const syncKey = options.syncKey ?? process.env.SYNC_KEY ?? "";
   const seedFile = options.seedFile || path.join(__dirname, "seed.json");
-  const files = { listings: path.join(dataDir, "listings.json"), meta: path.join(dataDir, "meta.json"), profile: path.join(dataDir, "profile.json") };
+  const files = { listings: path.join(dataDir, "listings.json"), meta: path.join(dataDir, "meta.json"), profile: path.join(dataDir, "profile.json"), shares: path.join(dataDir, "shares.json") };
   fs.mkdirSync(path.join(dataDir, "img"), { recursive: true });
   const now = options.now || (() => new Date());
   // The vault opens only with the right key; otherwise its routes answer 503 (the start-up check refuses to run in that case).
@@ -38,7 +38,8 @@ function createApp(options = {}) {
   const state = {
     listings: readJson(files.listings, null),
     meta: readJson(files.meta, { lastCheck: null, log: [] }),
-    profile: readJson(files.profile, null)
+    profile: readJson(files.profile, null),
+    shares: readJson(files.shares, { shares: [] }).shares
   };
   if (!state.listings) {
     state.listings = {};
@@ -52,6 +53,9 @@ function createApp(options = {}) {
 
   let writing = Promise.resolve();
   const persist = () => (writing = writing.catch(() => {}).then(() => Promise.all([writeJsonAtomic(files.listings, state.listings), writeJsonAtomic(files.meta, state.meta)])));
+
+  let writingShares = Promise.resolve();
+  const persistShares = () => (writingShares = writingShares.catch(() => {}).then(() => writeJsonAtomic(files.shares, { shares: state.shares })));
 
   const app = express();
   app.locals.state = state;
@@ -88,7 +92,7 @@ function createApp(options = {}) {
     next();
   };
   app.locals.requireKey = requireKey;
-  app.use(vaultApi({ state, vault, vaultStatus: vault ? "ready" : vStatus === "empty" ? "off" : vStatus, persist, persistShares: null, now }));
+  app.use(vaultApi({ state, vault, vaultStatus: vault ? "ready" : vStatus === "empty" ? "off" : vStatus, persist, persistShares, now }));
 
   app.get("/api/listings", (req, res) => res.json({ listings: state.listings, updatedAt: new Date().toISOString() }));
 
@@ -310,8 +314,13 @@ function createApp(options = {}) {
     const log = state.meta.log;
     delete state.listings[id];
     state.meta.log = log.filter(e => e.id !== id);
-    try { await persist(); }
+    // Its share links stop working with it.
+    const revoked = state.shares.filter(s => s.listingId === id && !s.revokedAt);
+    const at = now().toISOString();
+    for (const s of revoked) s.revokedAt = at;
+    try { await persist(); if (revoked.length) await persistShares(); }
     catch (e) {
+      for (const s of revoked) if (s.revokedAt === at) s.revokedAt = null;
       if (!state.listings[id]) state.listings[id] = c;
       if (state.meta.log.every(e => e.id !== id)) state.meta.log = [...state.meta.log, ...log.filter(e => e.id === id)].sort((a, b) => log.indexOf(a) - log.indexOf(b));
       return res.status(500).json({ error: "save failed" });

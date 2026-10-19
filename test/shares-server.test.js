@@ -338,7 +338,7 @@ test("a share whose listing is gone, and a document not in the share, are 404; t
     const only = (await s.share({ docIds: [s.payslip] })).body;
     assert.deepEqual(await answer(await get(s, only.url + "/summary")), NF);
     const page = await get(s, body.url);
-    assert.equal(page.headers.get("content-security-policy"), "default-src 'none'; style-src 'unsafe-inline'");
+    assert.equal(page.headers.get("content-security-policy"), "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'");
     delete s.app.locals.state.listings.flat;
     assert.deepEqual(await answer(await get(s, body.url)), NF);
     assert.deepEqual(await answer(await get(s, body.url + "/" + s.payslip)), NF);
@@ -370,4 +370,20 @@ test("trustProxy decides whether X-Forwarded-For separates visitors in the rate 
     for (let i = 0; i < 30; i++) await hit(off, "9." + i + ".9.9");
     assert.equal((await hit(off, "8.8.8.8")).status, 429);
   } finally { await off.close(); }
+});
+
+test("every /s response and the API carry nosniff and X-Frame-Options DENY", async () => {
+  const s = await setup();
+  try {
+    const { body } = await s.share();
+    const ok = r => { assert.equal(r.headers.get("x-content-type-options"), "nosniff"); assert.equal(r.headers.get("x-frame-options"), "DENY"); };
+    ok(await get(s, body.url));
+    ok(await get(s, body.url + "/" + s.payslip));
+    ok(await get(s, "/s/" + "D".repeat(43)));
+    ok(await fetch(s.base + "/api/vault", { headers: s.auth }));
+    for (let i = 0; i < 40; i++) await get(s, "/s/" + "D".repeat(43));
+    const r = await get(s, "/s/" + "D".repeat(43));
+    assert.equal(r.status, 429);
+    ok(r);
+  } finally { await s.close(); }
 });

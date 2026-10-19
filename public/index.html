@@ -418,6 +418,22 @@ dialog.sx::backdrop { background: rgba(0, 0, 0, .35); }
 .sx .stepper li.cur .dot { border-color: var(--accent); color: var(--accent); }
 @media (max-width: 560px) { .sx .stepper .nm { display: none; } .sx .sxhead, .sx .sxbody, .sx .sxfoot { padding-inline: 14px; } .sx button { padding: 0 14px; } }
 .sx .err { color: var(--bad); font-size: 14px; white-space: pre-line; margin: 0; } .sx .hint { color: var(--muted); font-size: 13px; margin: 0; }
+/* Redaction helper: full-screen dialog, pages stacked, black boxes drawn on an overlay canvas. */
+dialog.sx.rd { margin: 0; width: 100%; max-width: none; height: 100dvh; max-height: 100dvh; border: 0; border-radius: 0; }
+.sx.rd form { height: 100%; max-height: none; }
+.sx.rd .sxbody { max-height: none; flex: 1 1 0; background: var(--surface-2); }
+.rd-pages { display: grid; gap: 18px; justify-items: center; padding-bottom: 8px; }
+.rd-page { margin: 0; width: 100%; max-width: 900px; display: grid; gap: 6px; justify-items: center; }
+.rd-stack { position: relative; width: 100%; box-shadow: 0 1px 6px rgba(16, 24, 40, .18); background: #fff; }
+.rd-page.active .rd-stack { outline: 2px solid var(--accent); outline-offset: 2px; }
+.rd-stack canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.rd-overlay { touch-action: none; cursor: crosshair; }
+.rd-body.scrolling .rd-overlay { touch-action: pan-x pan-y pinch-zoom; cursor: default; }
+.sx .rd-tools { flex-wrap: wrap; }
+.rd-count { font-size: 13px; color: var(--muted); margin-left: auto; }
+.rd-mode { display: none; }
+@media (pointer: coarse) { .rd-mode { display: inline-flex; align-items: center; } }
+@media (max-width: 560px) { .sx.rd .sxhead .hint { font-size: 12.5px; } .sx.rd .bar button { padding: 0 12px; } }
 body.setup .wrap{display:none}
 </style>
 </head>
@@ -473,6 +489,8 @@ body.setup .wrap{display:none}
 <script src="criteria.js"></script>
 <script src="setup.js"></script>
 <script src="vault-ui.js"></script>
+<script src="imagepdf.js"></script>
+<script src="redact.js"></script>
 <script>
 (function () {
   let P = null, CAT = [];

@@ -109,7 +109,8 @@ function createApp(options = {}) {
       const where = await geocode(town, app.locals.fetchImpl);
       if (where) {
         out.lat = where.lat; out.lon = where.lon;
-        const home = state.profile && state.profile.home;
+        const centre = state.profile && state.profile.radius && state.profile.radius.center;
+        const home = centre ? { label: centre.address, lat: centre.lat, lon: centre.lon } : null;
         if (home) {
           const r = await drive(home, where, app.locals.fetchImpl);
           if (r) Object.assign(out, r);

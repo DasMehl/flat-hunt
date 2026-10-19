@@ -109,7 +109,7 @@ test("photos upload to DATA_DIR/img and are served from /img", async () => {
 
 const geoFetch = async url => ({ ok: true, status: 200, json: async () => url.includes("nominatim") ? [{ display_name: "45127 Essen", lat: "51.4556", lon: "7.0116" }] : { routes: [{ distance: 36000, duration: 1920 }] } });
 const failFetch = async () => { throw new Error("offline"); };
-const homeProfile = () => { const p = defaultProfile(); p.home = { label: "Königsallee 1, 40212 Düsseldorf", lat: 51.2254, lon: 6.7787 }; return p; };
+const homeProfile = () => { const p = defaultProfile(); p.radius = { center: { address: "Königsallee 1, 40212 Düsseldorf", lat: 51.2254, lon: 6.7787 }, km: 50 }; return p; };
 const newCar = { url: "https://suchen.mobile.de/fahrzeuge/details.html?id=123", title: "VW Golf 7 Variant 2.0 TDI", price: 9900, km: 150000, regYear: 2016, fuel: "diesel", gearbox: "automatic", town: "45127 Essen" };
 
 test("manual add geocodes the town and computes the drive", async () => {

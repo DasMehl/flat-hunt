@@ -107,3 +107,10 @@ test("noiseAt: on a tie the first layer in order is dominant; adapters are froze
   const hi = await N.noiseAt(KOE, "05111", async () => reply('<FIELDS Classify.PixelValue="78000000"/>'), noWait);
   assert.equal(hi.band, "75+");
 });
+
+test("parseBerlin: the live lowest class \"bis 55 dB(A)\" is readable and gives no band; \"ab 64 - 69\" is read as published", () => {
+  const f = v => ({ features: [{ properties: { "Lärmindex L DEN (Tag/Abend/Nacht) in dB(A)": v } }] });
+  assert.equal(N.parseBerlin(f("bis 55 dB(A)")), null);
+  assert.equal(N.parseBerlin(f("ab 64 - 69 dB(A)")), 64);
+  assert.equal(N.parseBerlin({ features: [f("bis 55 dB(A)").features[0], f("ab 75 dB(A)").features[0]] }), 75);
+});

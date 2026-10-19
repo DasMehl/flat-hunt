@@ -88,7 +88,51 @@
     return out;
   }
 
-  // Partial rating from listing data only (for listings without an assessment): area, condition and contact stay unknown.
+  // Price per m² against the other tracked listings of the same mode: same postcode when at least 3 exist, else same city.
+  // → { own, median, n, level: "postcode" | "city", diff (share above (+) or below (−) the median) } or null.
+  function priceCheck(l, others) {
+    const own = pricePerSqm(l);
+    if (own == null) return null;
+    const pool = (others || []).filter(o => o !== l && o.id !== l.id && o.mode === l.mode && !o.gone);
+    const median = vals => { const v = vals.sort((a, b) => a - b), m = v.length >> 1; return v.length % 2 ? v[m] : (v[m - 1] + v[m]) / 2; };
+    const tries = [["postcode", o => l.postcode && o.postcode === l.postcode], ["city", o => cityKey(l) && cityKey(o) === cityKey(l)]];
+    for (const [level, same] of tries) {
+      const vals = pool.filter(same).map(pricePerSqm).filter(v => v != null);
+      if (vals.length >= UNDERPRICED_MIN_OTHERS) { const med = median(vals); return { own, median: med, n: vals.length, level, diff: Math.round((own / med - 1) * 100) / 100 }; }
+    }
+    return null;
+  }
+
+  // Area rating 0–10 from the area facts (phase 3), shown in the rating tooltip:
+  //   everyday = 10 × mean over six groups of walking points (≤ 5 min 1, ≤ 10 min 0.75, ≤ 15 min 0.5, ≤ 20 min 0.25, else or none 0);
+  //     groups: transit stop, supermarket, pharmacy, doctor, kindergarten or school, park or playground.
+  //   minus flood (HQhäufig 3, HQ100 2, only HQextrem 0.5), noise Lden (≥ 70 dB 2, ≥ 65 1.5, ≥ 60 1, ≥ 55 0.5),
+  //   crime in the Kreis vs the national rate (≥ 1.5 × 1, ≥ 1.2 × 0.5). Figures with no data or an error count 0.
+  //   value = round(everyday − deductions), clamped to 0–10. Null until the amenities are known.
+  const AREA_GROUPS = [["transit"], ["supermarket"], ["pharmacy"], ["doctors"], ["kindergarten", "school"], ["park", "playground"]];
+  const walkPoints = m => m == null ? 0 : m <= 5 ? 1 : m <= 10 ? 0.75 : m <= 15 ? 0.5 : m <= 20 ? 0.25 : 0;
+  const FLOOD_DEDUCT = { high: 3, medium: 2, low: 0.5 };
+  function areaRating(area) {
+    const am = area && area.amenities;
+    if (!am || am.status !== "ok" || !am.items) return null;
+    const groups = AREA_GROUPS.map(cats => {
+      const mins = cats.map(c => am.items[c] && am.items[c].minutes).filter(v => typeof v === "number");
+      const minutes = mins.length ? Math.min(...mins) : null;
+      return { group: cats.join("|"), minutes, points: walkPoints(minutes) };
+    });
+    const everyday = Math.round(groups.reduce((s, g) => s + g.points, 0) / groups.length * 100) / 10;
+    const parts = [{ key: "everyday", value: everyday, groups }];
+    const fl = area.flood, no = area.noise, cr = area.crime;
+    if (fl && fl.status === "ok" && FLOOD_DEDUCT[fl.worst]) parts.push({ key: "flood", value: -FLOOD_DEDUCT[fl.worst], worst: fl.worst });
+    if (no && no.status === "ok" && no.max != null) { const d = no.max >= 70 ? 2 : no.max >= 65 ? 1.5 : no.max >= 60 ? 1 : no.max >= 55 ? 0.5 : 0; if (d) parts.push({ key: "noise", value: -d, max: no.max }); }
+    const ratio = cr && cr.status === "ok" && cr.ratio ? cr.ratio.total : null;
+    if (ratio != null) { const d = ratio >= 1.5 ? 1 : ratio >= 1.2 ? 0.5 : 0; if (d) parts.push({ key: "crime", value: -d, ratio }); }
+    const value = Math.max(0, Math.min(10, Math.round(parts.reduce((s, p) => s + p.value, 0))));
+    return { value, parts };
+  }
+
+  // Partial rating from listing data only (for listings without an assessment): condition and contact stay unknown;
+  // area is estimated once the area facts are computed.
   function estimateRating(l, profile) {
     const p = profile, r = {};
     let amount = null, limit = null;
@@ -102,6 +146,8 @@
     if (l.size > 0 && p.flat.sizeMin > 0) { const q = l.size / p.flat.sizeMin; r.size = q >= 1.2 ? 9 : q >= 1 ? 7 : 3; }
     const ratios = (p.places || []).map((place, i) => { const c = (l.commute || [])[i]; return c && known(c.minutes) && place.maxMin > 0 ? c.minutes / place.maxMin : null; }).filter(v => v != null);
     if (ratios.length) { const q = Math.max(...ratios); r.commute = q <= 0.5 ? 10 : q <= 1 ? 8 : q <= 1.5 ? 5 : 2; }
+    const area = areaRating(l.area);
+    if (area) r.area = area.value;
     return Object.keys(r).length ? r : null;
   }
 
@@ -118,5 +164,5 @@
     return w ? Math.round(sum / w * 10) : null;
   }
 
-  return { WEIGHT_KEYS, distanceKm, pricePerSqm, redFlagHits, checkCriteria, estimateRating, scoreListing };
+  return { WEIGHT_KEYS, distanceKm, pricePerSqm, redFlagHits, checkCriteria, priceCheck, areaRating, estimateRating, scoreListing };
 });

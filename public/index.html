@@ -343,8 +343,30 @@ tr:last-child td { border-bottom: 0; }
 .vu-row3 { grid-template-columns: minmax(80px, 1fr) minmax(80px, 1fr) minmax(140px, 2fr); }
 @media (max-width: 500px) { .vu-row3 { grid-template-columns: 1fr 1fr; } .vu-row3 > :last-child { grid-column: 1 / -1; } }
 .vu-row-end { align-items: center; }
-.aboutme input:not([type=checkbox]), .aboutme select, .aboutme textarea { padding: 8px 10px; min-height: 40px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--fg); width: 100%; min-width: 0; }
+.aboutme input:not([type=checkbox]), .aboutme select, .aboutme textarea, .docs input:not([type=checkbox]) { padding: 8px 10px; min-height: 40px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--fg); width: 100%; min-width: 0; }
 .aboutme input[type=file] { padding: 6px 8px; }
+.docs { display: grid; gap: 10px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); min-width: 0; }
+.docs + .lactions { margin-top: 14px; }
+.docs h4 { font-size: 13.5px; margin: 0; font-family: var(--display); }
+.docs .ld-open { justify-self: start; }
+.ld-reqs { display: grid; gap: 8px; }
+.ld-reqlist { margin: 0; padding-left: 18px; font-size: 13.5px; display: grid; gap: 2px; }
+.ld-panel { border: 1px solid var(--line); border-radius: 9px; padding: 12px; }
+.ld-checks { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px 14px; }
+.ld-pick .vu-doc { padding: 9px 11px; }
+.ld-pickrow { align-items: flex-start; } .ld-pickrow input { margin-top: 2px; }
+.ld-pickrow input:disabled + .vu-docmain { opacity: .7; } .ld-pickrow:has(input:disabled) { cursor: not-allowed; }
+.ld-days { max-width: 220px; }
+.ld-off { max-width: none; box-shadow: none; padding: 12px; gap: 8px; font-size: 13.5px; }
+.ld-new { border-color: var(--good); box-shadow: none; padding: 12px; gap: 10px; }
+.ld-linkrow { display: flex; gap: 8px; min-width: 0; } .ld-linkrow input { flex: 1 1 auto; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; }
+.ld-shares { display: grid; gap: 8px; }
+.ld-share .vu-dochead { gap: 8px; }
+.ld-opens summary { cursor: pointer; font-size: 13px; color: var(--muted); }
+.ld-opens ol { margin: 6px 0 0; padding-left: 20px; font-size: 13px; display: grid; gap: 2px; }
+dialog.sx.ld-warn { max-width: 520px; }
+.sx.ld-warn .bar { flex-wrap: wrap; }
+@media (max-width: 560px) { .sx.ld-warn .bar { flex-direction: column-reverse; align-items: stretch; } .sx.ld-warn .bar > span { display: none; } }
 .aboutme textarea { resize: vertical; min-height: 96px; }
 .vu-check { display: flex; gap: 8px; align-items: center; font-size: 13.5px; cursor: pointer; }
 .vu-check input { accent-color: var(--accent); width: 16px; height: 16px; margin: 0; flex: none; }
@@ -1201,7 +1223,10 @@ body.setup .wrap{display:none}
     const eb = el("button", "btn", T.edit); eb.type = "button"; eb.onclick = () => Setup.editListing({ listing: c, lang, onSaved: () => { expanded.add(c.id); load(); } });
     const db = el("button", "btn danger", T.del); db.type = "button"; db.onclick = () => removeListing(c, note);
     acts.append(eb, db);
-    ctr.append(rb, form, note, acts); right.append(ctr); body.append(right); d.append(body);
+    ctr.append(rb, form, note);
+    // Documents: requests and share links (public/vault-ui.js), between the conversation controls and Edit/Delete.
+    const docs = el("div", "docs"); VaultUI.listingDocs(docs, c, { lang, onChanged: () => load() });
+    right.append(ctr, docs, acts); body.append(right); d.append(body);
     return d;
   }
   function renderList(list) {
@@ -1295,7 +1320,7 @@ body.setup .wrap{display:none}
     } catch (e) { console.warn(e); $("#cards").hidden = false; $("#cards").innerHTML = ""; $("#cards").append(el("p", "empty", T.loadFail)); }
   }
   async function refresh() {
-    if (document.activeElement && document.activeElement.closest(".controls, aside.filters")) return;
+    if (document.activeElement && document.activeElement.closest(".controls, .docs, aside.filters, dialog")) return;
     try { const [r1, r2] = await Promise.all([fetch("/api/listings", { cache: "no-store" }), fetch("/api/meta", { cache: "no-store" })]); if (r1.ok) { raw = (await r1.json()).listings || {}; listings = toList(raw); if (r2.ok) meta = await r2.json(); render(); } } catch (e) {}
   }
   load();

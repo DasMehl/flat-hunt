@@ -46,6 +46,19 @@
       outdatedTip: "Landlords usually ask for the last three payslips; this one is older.",
       download: "Download", edit: "Edit", redact: "Redact", del: "Delete", cancel: "Cancel", saveDoc: "Save",
       confirmDelete: n => `Delete “${n}”? The file is removed from the vault and cannot be restored.`,
+      // Listing: Documents section
+      reqNone: "No document requests logged yet.", logReq: "Log a request", reqWhich: "What did the landlord ask for?", reqSave: "Save request", needOne: "Tick at least one document.",
+      approve: "Approve and create a link", approveIntro: "Tick what this landlord may see. Only these documents are behind the link.",
+      summaryNeedApplicant: "Save your applicant profile under About me first.", noDocsYet: "No documents in the vault yet. Add them under About me.",
+      days: "Link valid for (days, 1–30)", createLink: "Create link", creating: "Creating…",
+      payTitle: "Payslip not redacted", payText: "Before you share a payslip, cover your tax ID, social-security number and bank details.",
+      redactNow: "Redact now", shareAsIs: "Share as it is",
+      newLink: "New link", copy: "Copy", copied: "Copied", done: "Done",
+      linkNote: "Copy it now — for your safety it is shown only this once. Anyone with the link can open the documents until it expires or you revoke it.",
+      linksH: "Share links", created: d => `Created ${d}`, validUntil: d => `valid until ${d}`,
+      state: { active: "Active", expired: "Expired", revoked: "Revoked" },
+      opened: n => n === 0 ? "Not opened yet" : n === 1 ? "Opened once" : `Opened ${n} times`, lastOpen: d => `last ${d}`, allOpens: "Every open",
+      revoke: "Revoke", confirmRevoke: "Revoke this link? It stops working at once.", deletedDoc: "Deleted document",
       types: { payslip: "Payslip", contract: "Employment contract", schufa: "SCHUFA credit report", id: "ID document", "rent-confirmation": "Rent payment confirmation", "landlord-reference": "Landlord reference", other: "Document" }
     },
     de: {
@@ -74,6 +87,19 @@
       outdatedTip: "Vermieter verlangen meist die letzten drei Gehaltsnachweise; dieser ist älter.",
       download: "Herunterladen", edit: "Bearbeiten", redact: "Schwärzen", del: "Löschen", cancel: "Abbrechen", saveDoc: "Speichern",
       confirmDelete: n => `„${n}“ löschen? Die Datei wird aus dem Tresor entfernt und lässt sich nicht wiederherstellen.`,
+      // Listing: Documents section
+      reqNone: "Noch keine Anforderung von Unterlagen erfasst.", logReq: "Anforderung erfassen", reqWhich: "Was hat der Vermieter angefordert?", reqSave: "Anforderung speichern", needOne: "Bitte mindestens eine Unterlage ankreuzen.",
+      approve: "Freigeben und Link erstellen", approveIntro: "Kreuze an, was dieser Vermieter sehen darf. Nur diese Unterlagen sind über den Link erreichbar.",
+      summaryNeedApplicant: "Speichere zuerst deine Selbstauskunft unter „Über mich“.", noDocsYet: "Noch keine Unterlagen im Tresor. Füge sie unter „Über mich“ hinzu.",
+      days: "Link gültig für (Tage, 1–30)", createLink: "Link erstellen", creating: "Wird erstellt …",
+      payTitle: "Gehaltsnachweis nicht geschwärzt", payText: "Bevor du einen Gehaltsnachweis teilst, schwärze Steuer-ID, Sozialversicherungsnummer und Bankverbindung.",
+      redactNow: "Jetzt schwärzen", shareAsIs: "So teilen",
+      newLink: "Neuer Link", copy: "Kopieren", copied: "Kopiert", done: "Fertig",
+      linkNote: "Kopiere ihn jetzt – zu deiner Sicherheit wird er nur dieses eine Mal angezeigt. Wer den Link hat, kann die Unterlagen öffnen, bis er abläuft oder du ihn widerrufst.",
+      linksH: "Freigabe-Links", created: d => `Erstellt ${d}`, validUntil: d => `gültig bis ${d}`,
+      state: { active: "Aktiv", expired: "Abgelaufen", revoked: "Widerrufen" },
+      opened: n => n === 0 ? "Noch nicht geöffnet" : n === 1 ? "Einmal geöffnet" : `${n}-mal geöffnet`, lastOpen: d => `zuletzt ${d}`, allOpens: "Alle Aufrufe",
+      revoke: "Widerrufen", confirmRevoke: "Diesen Link widerrufen? Er funktioniert dann sofort nicht mehr.", deletedDoc: "Gelöschte Unterlage",
       types: { payslip: "Gehaltsnachweis", contract: "Arbeitsvertrag", schufa: "SCHUFA-Auskunft", id: "Ausweis", "rent-confirmation": "Mietzahlungsbestätigung", "landlord-reference": "Vermieterbescheinigung", other: "Dokument" }
     },
     pt: {
@@ -102,11 +128,39 @@
       outdatedTip: "Locadores costumam pedir os três últimos contracheques; este é mais antigo.",
       download: "Baixar", edit: "Editar", redact: "Tarjar", del: "Excluir", cancel: "Cancelar", saveDoc: "Salvar",
       confirmDelete: n => `Excluir “${n}”? O arquivo é removido do cofre e não pode ser recuperado.`,
+      // Listing: Documents section
+      reqNone: "Nenhum pedido de documentos registrado ainda.", logReq: "Registrar pedido", reqWhich: "O que o locador pediu?", reqSave: "Salvar pedido", needOne: "Marque pelo menos um documento.",
+      approve: "Aprovar e criar link", approveIntro: "Marque o que este locador pode ver. Só estes documentos ficam acessíveis pelo link.",
+      summaryNeedApplicant: "Salve primeiro seu perfil de candidato em “Sobre mim”.", noDocsYet: "Nenhum documento no cofre ainda. Adicione-os em “Sobre mim”.",
+      days: "Link válido por (dias, 1–30)", createLink: "Criar link", creating: "Criando…",
+      payTitle: "Contracheque sem tarja", payText: "Antes de compartilhar um contracheque, cubra o número de identificação fiscal, o número da previdência social e os dados bancários.",
+      redactNow: "Tarjar agora", shareAsIs: "Compartilhar assim",
+      newLink: "Novo link", copy: "Copiar", copied: "Copiado", done: "Concluído",
+      linkNote: "Copie agora — por segurança, ele só é mostrado esta vez. Quem tiver o link pode abrir os documentos até ele expirar ou você revogá-lo.",
+      linksH: "Links compartilhados", created: d => `Criado em ${d}`, validUntil: d => `válido até ${d}`,
+      state: { active: "Ativo", expired: "Expirado", revoked: "Revogado" },
+      opened: n => n === 0 ? "Ainda não aberto" : n === 1 ? "Aberto uma vez" : `Aberto ${n} vezes`, lastOpen: d => `último ${d}`, allOpens: "Todas as aberturas",
+      revoke: "Revogar", confirmRevoke: "Revogar este link? Ele deixa de funcionar na hora.", deletedDoc: "Documento excluído",
       types: { payslip: "Contracheque", contract: "Contrato de trabalho", schufa: "Relatório SCHUFA", id: "Documento de identidade", "rent-confirmation": "Comprovante de pagamento do aluguel", "landlord-reference": "Referência do locador", other: "Documento" }
     }
   };
 
-  if (typeof window === "undefined") { module.exports = { defaultApplicant, TYPES, L }; return; }
+  const SUMMARY = "summary";
+  // Payslips in a selection that are not redacted and were not confirmed as "share as it is" before.
+  function pendingPayslips(docs, ids, okIds) {
+    const ok = new Set(okIds || []);
+    return ids.map(id => docs.find(d => d.id === id)).filter(d => d && d.type === "payslip" && !d.redactedAt && !ok.has(d.id));
+  }
+  // Ids ticked when the checklist opens: documents whose type is in the newest request, plus the summary if it was asked for and exists.
+  function preticked(docs, requests, hasApplicant) {
+    const last = Array.isArray(requests) && requests.length ? requests[requests.length - 1] : null;
+    if (!last) return [];
+    const ids = docs.filter(d => last.types.includes(d.type)).map(d => d.id);
+    if (hasApplicant && last.types.includes(SUMMARY)) ids.push(SUMMARY);
+    return ids;
+  }
+
+  if (typeof window === "undefined") { module.exports = { defaultApplicant, TYPES, L, pendingPayslips, preticked }; return; }
 
   // ---------- helpers ----------
   const el = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
@@ -381,8 +435,251 @@
     host.replaceChildren(el("h2", null, t.title), grid);
   }
 
-  // Filled in with the listing's Documents section (requests and share links).
-  function listingDocs(host) { host.hidden = true; }
+  // ---------- listing: Documents section ----------
+  // State per listing survives the page's re-renders (60-second refresh, saves): open panel, ticks, the new link.
+  // The new link lives only here, in memory, until "Done" or a page reload; the server never returns it again.
+  const LD = new Map();
+  const OK_KEY = "flathunt-payslip-ok";
+  const okIds = () => { try { const v = JSON.parse(localStorage.getItem(OK_KEY) || "[]"); return Array.isArray(v) ? v.filter(x => typeof x === "string") : []; } catch (e) { return []; } };
+  const addOk = id => { try { const v = okIds(); if (!v.includes(id)) localStorage.setItem(OK_KEY, JSON.stringify([...v, id].slice(-200))); } catch (e) {} };
+  const fmtTime = (t, iso) => { const d = new Date(iso); if (isNaN(d)) return iso || ""; return fmtDay(t, iso) + " " + d.toLocaleTimeString(t.locale, { hour: "2-digit", minute: "2-digit" }); };
+  const reqName = (t, k) => k === SUMMARY ? t.summary : t.types[k] || k;
+
+  function listingDocs(host, listing, { lang, onChanged } = {}) {
+    const id = listing.id;
+    const m = LD.get(id) || { panel: null, sel: null, reqSel: null, days: 7, newUrl: "", data: null };
+    LD.set(id, m);
+    Object.assign(m, { host, listing, lang, t: L[lang] || L.en, onChanged: typeof onChanged === "function" ? onChanged : () => {} });
+    host.hidden = false;
+    host.classList.add("docs");
+    draw(m);
+    reloadDocs(m);
+  }
+
+  async function reloadDocs(m) {
+    const lid = encodeURIComponent(m.listing.id);
+    let status = "off";
+    try { const r = await fetch("/api/vault/status", { cache: "no-store" }); if (r.ok) status = (await r.json()).status; } catch (e) {}
+    if (status !== "ready") { m.data = { off: status }; return draw(m); }
+    try {
+      const [rv, ra, rs] = await Promise.all([api("/api/vault"), api("/api/applicant"), api(`/api/listings/${lid}/shares`)]);
+      if (!rv.ok || !rs.ok || (!ra.ok && ra.status !== 404)) throw new Error("load");
+      m.data = { docs: (await rv.json()).docs || [], hasApplicant: ra.ok, shares: (await rs.json()).shares || [] };
+    } catch (e) {
+      m.data = e instanceof Off ? { off: "off" } : { error: true };
+    }
+    draw(m);
+  }
+
+  function draw(m) {
+    const { host, t } = m;
+    const kids = [el("h3", null, t.docs), requestsBlock(m)];
+    const D = m.data;
+    if (!D) kids.push(el("p", "vu-empty", t.loading));
+    else if (D.off) {
+      const box = el("div", "vu-off ld-off");
+      box.append(el("strong", null, t.offTitle));
+      if (D.off === "wrong-key") box.append(el("p", null, t.offWrong));
+      box.append(el("p", null, t.offHow));
+      const pre = el("pre", "vu-cmd"); pre.append(el("code", null, "openssl rand -base64 32")); box.append(pre);
+      const p = el("p"); const a = el("a", null, t.offMore); a.href = README_URL; a.target = "_blank"; a.rel = "noopener"; p.append(a); box.append(p);
+      kids.push(box);
+    } else if (D.error) kids.push(el("p", "vu-err", t.netFail));
+    else {
+      if (m.newUrl) kids.push(newLinkBlock(m));
+      kids.push(m.panel === "share" ? shareForm(m) : btn(t.approve, "vu-btn primary ld-open", () => { m.panel = "share"; m.sel = null; draw(m); }));
+      kids.push(sharesBlock(m));
+    }
+    host.replaceChildren(...kids);
+  }
+
+  // Logged requests, newest first, and the "Log a request" form. Needs no vault.
+  function requestsBlock(m) {
+    const { t, listing } = m;
+    const wrap = el("div", "ld-reqs");
+    const reqs = [...(listing.docRequests || [])].reverse();
+    if (!reqs.length) wrap.append(el("p", "vu-empty", t.reqNone));
+    else { const ul = el("ul", "ld-reqlist"); reqs.forEach(r => ul.append(el("li", null, `${fmtDay(t, r.at)}: ${(r.types || []).map(k => reqName(t, k)).join(", ")}`))); wrap.append(ul); }
+    if (m.panel !== "request") { wrap.append(btn(t.logReq, "vu-btn ld-open", () => { m.panel = "request"; m.reqSel = []; draw(m); })); return wrap; }
+
+    const f = el("form", "vu-form ld-panel"); f.noValidate = true;
+    const set = el("fieldset", "vu-set"); set.append(el("legend", null, t.reqWhich));
+    const grid = el("div", "ld-checks");
+    [...TYPES, SUMMARY].forEach(k => {
+      const [w, i] = check(reqName(t, k), m.reqSel.includes(k));
+      i.onchange = () => { m.reqSel = i.checked ? [...m.reqSel, k] : m.reqSel.filter(x => x !== k); };
+      grid.append(w);
+    });
+    set.append(grid); f.append(set);
+    const err = el("div", "vu-err"); err.setAttribute("role", "alert");
+    const ok = el("button", "vu-btn primary", t.reqSave); ok.type = "submit";
+    const bar = el("div", "vu-bar"); bar.append(ok, btn(t.cancel, "vu-btn", () => { m.panel = null; draw(m); }));
+    f.append(err, bar);
+    f.onsubmit = async e => {
+      e.preventDefault(); err.textContent = "";
+      const types = [...TYPES, SUMMARY].filter(k => m.reqSel.includes(k));
+      if (!types.length) { err.textContent = t.needOne; return; }
+      ok.disabled = true;
+      let r;
+      try { r = await fetch(`/api/listings/${encodeURIComponent(listing.id)}/doc-requests`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ types }), cache: "no-store" }); }
+      catch (x) { ok.disabled = false; err.textContent = t.netFail; return; }
+      ok.disabled = false;
+      if (!r.ok) { err.textContent = t.saveFail; return; }
+      const j = await r.json().catch(() => ({}));
+      if (j.listing) m.listing = { ...j.listing, id: listing.id };
+      m.panel = null; m.reqSel = null;
+      draw(m);
+      m.onChanged(m.listing);
+    };
+    wrap.append(f);
+    return wrap;
+  }
+
+  // Checklist of vault documents plus the summary, link duration, Create.
+  function shareForm(m) {
+    const { t } = m, D = m.data;
+    if (!m.sel) m.sel = preticked(D.docs, m.listing.docRequests, D.hasApplicant);
+    const f = el("form", "vu-form ld-panel"); f.noValidate = true;
+    f.append(el("p", "vu-hint", t.approveIntro));
+    const ul = el("ul", "vu-rows ld-pick");
+    const row = (key, head, meta, disabled) => {
+      const li = el("li", "vu-doc");
+      const w = el("label", "vu-check ld-pickrow"); const i = input("checkbox"); i.checked = m.sel.includes(key) && !disabled; i.disabled = !!disabled;
+      i.onchange = () => { m.sel = i.checked ? [...m.sel, key] : m.sel.filter(x => x !== key); };
+      const txt = el("span", "vu-docmain"); txt.append(head); if (meta) txt.append(meta);
+      w.append(i, txt); li.append(w); ul.append(li);
+    };
+    if (!D.docs.length) f.append(el("p", "vu-empty", t.noDocsYet));
+    D.docs.forEach(d => {
+      const head = el("span", "vu-dochead"); head.append(el("strong", null, t.types[d.type] || d.type));
+      if (d.redactedAt) head.append(el("span", "vu-badge good", t.redacted));
+      if (d.outdated) { const b = el("span", "vu-badge warn", t.outdated); b.title = t.outdatedTip; head.append(b); }
+      const meta = [d.label, d.date ? fmtDay(t, d.date) : ""].filter(Boolean).join(" · ");
+      row(d.id, head, meta ? el("span", "vu-docmeta", meta) : null, false);
+    });
+    const sh = el("span", "vu-dochead"); sh.append(el("strong", null, t.summary));
+    row(SUMMARY, sh, D.hasApplicant ? null : el("span", "vu-docmeta", t.summaryNeedApplicant), !D.hasApplicant);
+    f.append(ul);
+    const days = input("number", m.days, { min: 1, max: 30, step: 1, inputmode: "numeric" });
+    days.oninput = () => { m.days = days.value; };
+    f.append(field(t.days, days, "ld-days"));
+    const err = el("div", "vu-err"); err.setAttribute("role", "alert");
+    const ok = el("button", "vu-btn primary", t.createLink); ok.type = "submit";
+    const bar = el("div", "vu-bar"); bar.append(ok, btn(t.cancel, "vu-btn", () => { m.panel = null; m.sel = null; draw(m); }));
+    f.append(err, bar);
+    f.onsubmit = e => { e.preventDefault(); create(m, err, ok); };
+    return f;
+  }
+
+  async function create(m, err, ok) {
+    const { t } = m, D = m.data;
+    err.textContent = "";
+    const known = new Set([...D.docs.map(d => d.id), ...(D.hasApplicant ? [SUMMARY] : [])]);
+    const docIds = m.sel.filter(x => known.has(x));
+    if (!docIds.length) { err.textContent = t.needOne; return; }
+    const days = Number(m.days);
+    const pending = pendingPayslips(D.docs, docIds, okIds());
+    if (pending.length) return payslipWarning(m, pending[0], () => create(m, err, ok));
+    ok.disabled = true; ok.textContent = t.creating;
+    let r;
+    try { r = await api(`/api/listings/${encodeURIComponent(m.listing.id)}/shares`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ docIds, days }) }); }
+    catch (x) { ok.disabled = false; ok.textContent = t.createLink; if (x instanceof Off) { m.data = { off: "off" }; return draw(m); } err.textContent = t.netFail; return; }
+    ok.disabled = false; ok.textContent = t.createLink;
+    const j = await r.json().catch(() => ({}));
+    if (r.status === 400) {
+      err.append(el("strong", null, t.fixThis));
+      const ul = el("ul"); (j.details || [j.error || t.saveFail]).forEach(d => ul.append(el("li", null, d))); err.append(ul);
+      return;
+    }
+    if (r.status !== 201 || !j.url) { err.textContent = t.saveFail; return; }
+    m.newUrl = location.origin + j.url;
+    m.panel = null; m.sel = null; m.days = 7;
+    draw(m);
+    reloadDocs(m);
+  }
+
+  // Once per payslip: a reminder to cover the tax ID, social-security number and bank details.
+  function payslipWarning(m, doc, proceed) {
+    const { t } = m;
+    const dlg = el("dialog", "sx ld-warn");
+    dlg.setAttribute("aria-labelledby", "ld-warn-title");
+    const form = el("form"); form.method = "dialog";
+    const head = el("div", "sxhead"); const h2 = el("h2", null, t.payTitle); h2.id = "ld-warn-title"; head.append(h2);
+    const body = el("div", "sxbody"); body.append(el("p", null, t.payText), el("p", "hint", docName(t, doc)));
+    const foot = el("div", "sxfoot"); const bar = el("div", "bar");
+    const redactB = btn(t.redactNow, "primary", () => {
+      dlg.close();
+      window.Redact.open({ doc, lang: m.lang, onSaved: () => reloadDocs(m) });
+    });
+    redactB.hidden = !window.Redact;
+    const anyway = btn(t.shareAsIs, "", () => { addOk(doc.id); dlg.close(); proceed(); });
+    bar.append(btn(t.cancel, "", () => dlg.close()), el("span"), anyway, redactB);
+    foot.append(bar); form.append(head, body, foot); dlg.append(form);
+    dlg.addEventListener("close", () => dlg.remove());
+    document.body.append(dlg);
+    dlg.showModal();
+    (window.Redact ? redactB : anyway).focus();
+  }
+
+  function newLinkBlock(m) {
+    const { t } = m;
+    const box = el("div", "vu-card ld-new"); box.setAttribute("role", "status");
+    box.append(el("h4", null, t.newLink));
+    const inp = input("text", m.newUrl, { readonly: "", "aria-label": t.newLink, spellcheck: "false" });
+    inp.onfocus = () => inp.select();
+    const note = el("span", "vu-saved");
+    const copy = btn(t.copy, "vu-btn primary", async () => {
+      try { await navigator.clipboard.writeText(m.newUrl); flash(note, t.copied); }
+      catch (e) { inp.focus(); inp.select(); }
+    });
+    const row = el("div", "ld-linkrow"); row.append(inp, copy);
+    const bar = el("div", "vu-bar"); bar.append(btn(t.done, "vu-btn", () => { m.newUrl = ""; draw(m); }), note);
+    box.append(row, el("p", "vu-hint", t.linkNote), bar);
+    return box;
+  }
+
+  function sharesBlock(m) {
+    const { t } = m, D = m.data;
+    const wrap = el("div", "ld-shares");
+    if (!D.shares.length) return wrap;
+    wrap.append(el("h4", null, t.linksH));
+    const names = new Map(D.docs.map(d => [d.id, docName(t, d)]));
+    const nameOf = id => id === SUMMARY ? t.summary : names.get(id) || t.deletedDoc;
+    const ul = el("ul", "vu-rows");
+    D.shares.forEach(s => {
+      const st = s.revokedAt ? "revoked" : s.active ? "active" : "expired";
+      const li = el("li", "vu-doc ld-share");
+      const head = el("div", "vu-dochead");
+      head.append(el("span", "pill " + { active: "s-accepted", expired: "s-new", revoked: "s-rejected" }[st], t.state[st]));
+      head.append(el("span", "vu-docmeta num", `${t.created(fmtTime(t, s.createdAt))} · ${t.validUntil(fmtTime(t, s.expiresAt))}`));
+      li.append(head, el("div", "vu-doclabel", (s.docIds || []).map(nameOf).join(", ")));
+      const opens = s.opens || [];
+      const last = opens.length ? opens[opens.length - 1] : null;
+      const line = t.opened(opens.length) + (last ? " · " + t.lastOpen(fmtTime(t, last.at)) : "");
+      if (opens.length) {
+        const det = el("details", "ld-opens"); det.append(el("summary", null, line));
+        const ol = el("ol"); [...opens].reverse().forEach(o => ol.append(el("li", "num", `${fmtTime(t, o.at)} · ${nameOf(o.docId)}`))); det.append(ol);
+        li.append(det);
+      } else li.append(el("div", "vu-docmeta", line));
+      if (st === "active") {
+        const err = el("div", "vu-err"); err.setAttribute("role", "alert");
+        const rv = btn(t.revoke, "vu-btn danger", async () => {
+          if (!confirm(t.confirmRevoke)) return;
+          rv.disabled = true; err.textContent = "";
+          let r;
+          try { r = await api("/api/shares/" + encodeURIComponent(s.id), { method: "DELETE" }); }
+          catch (x) { rv.disabled = false; if (x instanceof Off) { m.data = { off: "off" }; return draw(m); } err.textContent = t.netFail; return; }
+          rv.disabled = false;
+          if (!r.ok && r.status !== 404) { err.textContent = t.saveFail; return; }
+          reloadDocs(m);
+        });
+        const acts = el("div", "vu-btns vu-docacts"); acts.append(rv); li.append(acts, err);
+      }
+      ul.append(li);
+    });
+    wrap.append(ul);
+    return wrap;
+  }
 
   window.VaultUI = { mountAbout, listingDocs, TYPES, L };
 })();

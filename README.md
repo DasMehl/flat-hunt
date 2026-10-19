@@ -1,12 +1,12 @@
 # Flat Hunt
 
-A private tracker for finding a flat to rent or buy, run by each person on their own server. You describe your household and income, what you want and where you need to get to every day. The site ranks listings by your priorities, checks commute times and keeps your conversations with landlords. Planned for later phases: area analysis with sourced facts, and encrypted storage for your application documents, shared only after you approve, through an expiring, watermarked link.
+A private tracker for finding a flat to rent or buy, run by each person on their own server. You describe your household and income, what you want and where you need to get to every day. The site ranks listings by your priorities, checks commute times and keeps your conversations with landlords. It also keeps your application documents encrypted and shares them only after you approve, through an expiring, watermarked link. Planned for later phases: area analysis with sourced facts.
 
 A Claude Code routine that finds new listings and sends replies from templates you approve is planned (phase 4).
 
 ## Status
 
-Phase 1 (core tracker) is built. Phases 2 to 4 are planned. The full design is in [docs/design.md](docs/design.md). It builds on [Car Hunt](https://github.com/DasMehl/car-hunt).
+Phases 1 (core tracker) and 2 (applicant profile and document vault) are built. Phases 3 and 4 are planned. The full design is in [docs/design.md](docs/design.md). It builds on [Car Hunt](https://github.com/DasMehl/car-hunt).
 
 ## What it does in phase 1
 
@@ -20,6 +20,14 @@ Phase 1 (core tracker) is built. Phases 2 to 4 are planned. The full design is i
 - **Purchase costs:** land-transfer tax by German state, plus 2 % for notary and land registry, plus the agent fee you enter. The rates were checked in June 2026; check again before buying.
 - **Costs panel:** monthly and one-off costs per listing, including an editable maintenance reserve for purchases.
 
+## What it does in phase 2
+
+- **Applicant profile:** household, work, what you can provide on request and a few sentences about you, with a one-page applicant summary PDF in German, English or Portuguese.
+- **Document vault:** PDF, JPEG and PNG files up to 10 MB, stored encrypted with your `VAULT_KEY`. Payslips older than three months are flagged.
+- **Document requests:** log on a listing which documents the landlord asked for; the listing moves to "Documents requested".
+- **Share links, only after you approve:** you tick the documents for one landlord and get a link, valid for 7 days by default (1 to 30). You can revoke it at any time. The link is rate-limited. Every page of every document carries the watermark "Only for the application for <address> · <date>". Every view is logged with its time, but no IP address.
+- **Redaction helper:** cover tax ID, social-security number or bank details before you share. It works in your browser, and the covered parts are removed from the saved copy, not just hidden. Before a payslip is shared for the first time, the page reminds you to do this.
+
 ## Run your own copy
 
 You need Node.js 18 or newer and a Railway account (or any host that runs a Node server with a persistent disk).
@@ -31,9 +39,17 @@ You need Node.js 18 or newer and a Railway account (or any host that runs a Node
    - `DATA_DIR=/data` — where the JSON data files are kept. Without the volume, data is lost on redeploy.
    - `SITE_PASSWORD` — the password for the whole site. The server refuses to start without it.
    - `SYNC_KEY` — a secret for the routine's API calls and photo uploads. Without it those routes return 503. You can leave it unset if you do not use the routine.
+   - `VAULT_KEY` — the key for the applicant profile and document vault. Create it with `openssl rand -base64 32`, set it on the service, and keep a copy in your password manager. Without the same key the vault cannot be read, and once documents are stored the server will not start without it. The key is never written to the volume. Without `VAULT_KEY` the profile, documents and share links are off. The server refuses `VAULT_KEY` without `SITE_PASSWORD`.
+   - `TRUST_PROXY=1` (optional, recommended on Railway) — Railway puts one proxy in front of the server; with this set, the share-link rate limit counts visitors instead of the proxy.
 5. Deploy, then open the Railway URL and sign in with `SITE_PASSWORD`. The setup wizard asks for your profile on first use.
 
-`/healthz` is the only route that does not require the password.
+`/healthz` and share links (`/s/<token>`) are the only routes that do not require the password.
+
+### What a landlord sees
+
+A share link opens a page that lists the documents you shared, and each document opens as a PDF with the watermark on every page. Nothing else of your hunt is reachable through it. The link stops working when it expires or you revoke it; after that it answers "Not found", like any unknown link. Each open is logged with its time and the document, never with an IP address, and you see the opens on the listing.
+
+The token is part of the link's path, so your host's access logs may record it. Revoke links you no longer need.
 
 To run locally without a password (for trying it out only):
 
@@ -41,7 +57,15 @@ To run locally without a password (for trying it out only):
 ALLOW_OPEN=1 DATA_DIR=./data SYNC_KEY=dev npm start
 ```
 
-Then open http://localhost:3000. With `ALLOW_OPEN=1`, anyone who can reach the server can see and edit the hunt.
+Then open http://localhost:3000. With `ALLOW_OPEN=1`, anyone who can reach the server can see and edit the hunt, and the document vault stays off.
+
+To try the document vault locally, set a password and a key:
+
+```sh
+SITE_PASSWORD=test DATA_DIR=./data SYNC_KEY=dev VAULT_KEY=$(openssl rand -base64 32) npm start
+```
+
+A new key on each start cannot open the vault of the previous run: keep one key per data directory.
 
 Set `SEED=1` on the first start, with no `listings.json` yet, to load example listings from a `seed.json` next to `server.js`. No seed file ships with the repository; without one the hunt starts empty.
 
@@ -53,7 +77,6 @@ npm test
 
 ## Coming next
 
-- **Phase 2: applicant profile and document vault.** Applicant details and a one-page summary, encrypted document storage (`VAULT_KEY`), and approval-gated share links with a watermark and an access log.
 - **Phase 3: area analysis.** Sourced facts per listing: everyday amenities, noise and flood zones, police crime statistics at district level, and price per m² against your tracked listings.
 - **Phase 4: routine and automatic answers.** A Claude Code routine that searches Immowelt, Kleinanzeigen and WG-Gesucht in your own browser, and sends approved template replies at a human pace, never twice to the same listing.
 
@@ -65,5 +88,6 @@ Flat Hunt uses free public services and does not run its own scrapers:
 - [OSRM](https://project-osrm.org/) for driving times.
 - [FOSSGIS](https://routing.openstreetmap.de/) bike routing for cycling times.
 - [Transitous](https://transitous.org/) for public-transport times.
+- [pdf.js](https://mozilla.github.io/pdf.js/) (loaded from cdnjs) for the redaction helper, and [pdf-lib](https://pdf-lib.js.org/) for watermarks and the applicant summary.
 
 The lookups run on your server when you add or edit a listing, and from the routine. Each service has a usage policy; keep your use within it.

@@ -323,6 +323,54 @@ tr:last-child td { border-bottom: 0; }
   .howto { font-size: 12.5px; }
 }
 @media (prefers-reduced-motion: no-preference) { .photos .thumbs img { transition: opacity .15s; } }
+/* About me: applicant profile (left) and document vault (right); stacked on phones. */
+.aboutme { display: grid; gap: 12px; scroll-margin-top: 64px; }
+.aboutme h2 { font-size: 20px; }
+.vu-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+@media (max-width: 700px) { .vu-grid { grid-template-columns: minmax(0, 1fr); } }
+.vu-card, .vu-off { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); padding: 16px; display: grid; gap: 12px; min-width: 0; }
+.vu-card h3, .vu-off h3 { font-size: 16px; } .vu-card h4 { font-size: 14px; margin: 0; font-family: var(--display); }
+.vu-off { max-width: 72ch; } .vu-off p { margin: 0; }
+.vu-cmd { margin: 0; background: var(--surface-2); border-radius: 8px; padding: 9px 12px; overflow-x: auto; font-size: 13px; }
+.vu-hint { margin: 0; color: var(--muted); font-size: 13px; }
+.vu-empty { margin: 0; color: var(--muted); font-size: 13.5px; }
+.vu-form { display: grid; gap: 12px; min-width: 0; }
+.vu-set { border: 0; padding: 0; margin: 0; display: grid; gap: 8px; min-width: 0; }
+.vu-set legend { padding: 0; margin-bottom: 6px; font-size: 14px; font-weight: 600; }
+.vu-fld { display: grid; gap: 4px; font-size: 13.5px; min-width: 0; }
+.vu-fld > label { color: var(--muted); font-weight: 500; font-size: 12.5px; }
+.vu-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; align-items: end; }
+.vu-row3 { grid-template-columns: minmax(80px, 1fr) minmax(80px, 1fr) minmax(140px, 2fr); }
+@media (max-width: 500px) { .vu-row3 { grid-template-columns: 1fr 1fr; } .vu-row3 > :last-child { grid-column: 1 / -1; } }
+.vu-row-end { align-items: center; }
+.aboutme input:not([type=checkbox]), .aboutme select, .aboutme textarea { padding: 8px 10px; min-height: 40px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--fg); width: 100%; min-width: 0; }
+.aboutme input[type=file] { padding: 6px 8px; }
+.aboutme textarea { resize: vertical; min-height: 96px; }
+.vu-check { display: flex; gap: 8px; align-items: center; font-size: 13.5px; cursor: pointer; }
+.vu-check input { accent-color: var(--accent); width: 16px; height: 16px; margin: 0; flex: none; }
+.vu-count { justify-self: end; font-size: 12px; color: var(--muted); }
+.vu-bar, .vu-btns { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.vu-btn { display: inline-flex; align-items: center; justify-content: center; height: 40px; padding: 0 16px; border-radius: 999px; border: 1px solid var(--accent); background: transparent; color: var(--accent); font-weight: 600; font-size: 14px; cursor: pointer; white-space: nowrap; text-decoration: none; }
+.vu-btn:hover { background: var(--info-bg); }
+.vu-btn.primary { background: var(--accent); color: var(--accent-fg); } .vu-btn.primary:hover { filter: brightness(1.08); }
+.vu-btn.danger { border-color: var(--bad); color: var(--bad); } .vu-btn.danger:hover { background: var(--bad-bg); }
+.vu-btn:disabled { opacity: .5; cursor: not-allowed; filter: none; background: transparent; }
+.vu-btn.primary:disabled { background: var(--accent); }
+.vu-saved { font-size: 13px; color: var(--good); }
+.vu-err { color: var(--bad); font-size: 13.5px; white-space: pre-line; } .vu-err:empty { display: none; }
+.vu-err ul { margin: 4px 0 0; padding-left: 18px; }
+.vu-summary { display: grid; gap: 8px; border-top: 1px solid var(--line); padding-top: 12px; }
+.vu-upload { border-bottom: 1px solid var(--line); padding-bottom: 14px; }
+.vu-rows { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.vu-doc { border: 1px solid var(--line); border-radius: 9px; padding: 11px 12px; display: grid; gap: 8px; min-width: 0; }
+.vu-docmain { display: grid; gap: 2px; min-width: 0; }
+.vu-dochead { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.vu-doclabel { overflow-wrap: anywhere; }
+.vu-docmeta { font-size: 12.5px; color: var(--muted); }
+.vu-docacts .vu-btn { height: 34px; padding: 0 12px; font-size: 13px; }
+.vu-badge { font-size: 11.5px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: var(--surface-2); }
+.vu-badge.good { background: var(--good-bg); color: var(--good); } .vu-badge.warn { background: var(--warn-bg); color: var(--warn); cursor: help; }
+#aboutbtn[aria-pressed="true"] { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
 [hidden] { display: none !important; }
 /* Dialogs (wizard, Settings, Add a listing): pinned near the top, scrolling body, button bar always at the bottom. */
 dialog.sx { border: 1px solid var(--line); border-radius: var(--radius); padding: 0; margin: 6vh auto auto; max-width: 720px; width: calc(100% - 32px); max-height: 88vh; background: var(--surface); color: var(--fg); box-shadow: 0 12px 40px rgba(16, 24, 40, .18); overflow: hidden; }
@@ -383,6 +431,7 @@ body.setup .wrap{display:none}
     <div class="hright">
       <button class="chip" id="addlisting" type="button"></button>
       <button class="chip" id="settings" type="button"></button>
+      <button class="chip" id="aboutbtn" type="button" aria-controls="aboutme" aria-pressed="false"></button>
       <button class="newpill" id="newpill" type="button" hidden></button>
       <div class="lang" role="group" aria-label="Language">
         <button type="button" data-lang="en">EN</button><button type="button" data-lang="de">DE</button><button type="button" data-lang="pt">PT-BR</button>
@@ -402,6 +451,7 @@ body.setup .wrap{display:none}
       <nav class="jumpnav" id="jumpnav" aria-label="Page sections"></nav>
       <section class="welcome" id="welcome" hidden></section>
       <section class="stale" id="stale" role="status" hidden></section>
+      <section class="aboutme" id="aboutme" hidden></section>
       <div class="kpis" id="kpis"></div>
       <section class="decision" id="decision"></section>
       <div class="updates" id="updates" hidden></div>
@@ -422,6 +472,7 @@ body.setup .wrap{display:none}
 <script src="money.js"></script>
 <script src="criteria.js"></script>
 <script src="setup.js"></script>
+<script src="vault-ui.js"></script>
 <script>
 (function () {
   let P = null, CAT = [];
@@ -430,7 +481,7 @@ body.setup .wrap{display:none}
       sub: (n, modes, d) => `${n} ${n === 1 ? "listing" : "listings"} · ${modes}${d ? " · last listing check " + d : ""}`,
       modesTxt: { rent: "rent", buy: "buy", both: "rent and buy" },
       newSince: n => `${n} new since your last visit`,
-      head: ["Add a listing", "Settings"],
+      head: ["Add a listing", "Settings", "About me"],
       status: { new: "New", contacted: "Contacted", "viewing-invited": "Viewing invited", "viewing-done": "Viewing done", applied: "Applied", "docs-requested": "Documents requested", accepted: "Accepted", rejected: "Rejected", dropped: "Dropped", gone: "Gone" },
       mode: { rent: "Rent", buy: "Buy" },
       placeMode: { car: "car", transit: "transit", bike: "bike" },
@@ -442,7 +493,7 @@ body.setup .wrap{display:none}
       search: "Search title, address or district", savedOnly: "Shortlist only", inCriteria: "Only listings that match my criteria", hideOut: "Hide rejected, dropped and gone",
       sortOpts: { rec: "Recommendation", score: "Score", price: "Price", ppsqm: "Price per m²", size: "Size (largest)", commute: p => p ? `Commute to ${p}` : "Commute to first place", newest: "Newest" },
       kpiMatch: "listings match", tracked: n => `${n} tracked`, kpiBest: "best score", kpiCheapRent: "cheapest warm rent", kpiCheapBuy: "cheapest price", kpiLargest: "largest", kpiCommute: p => `shortest to ${p}`,
-      nav: { decision: "Focus", listings: "Listings", costs: "Costs", explore: "Map & chart", compare: "Compare" },
+      nav: { aboutme: "About me", decision: "Focus", listings: "Listings", costs: "Costs", explore: "Map & chart", compare: "Compare" },
       focus: "Listings worth a closer look", focusHint: "Shortlisted listings first, then the highest scored ones still available. Scores summarise the data; see the flat before deciding.", noFocus: "No available listings match your filters.", details: "Open details", score: "score", perMonth: "/month", loanMonth: "loan/month",
       map: "Where they are", radius: "Search radius", scoreHigh: "≥ 70 good", scoreMid: "55–69 fair", scoreLow: "< 55 weak",
       chart: m => m === "buy" ? "Price vs size, coloured by score" : "Warm rent vs size, coloured by score", limitRent: "max warm rent", limitBuy: "max price", noChart: "No listings with size and price to plot yet.",
@@ -478,7 +529,7 @@ body.setup .wrap{display:none}
       sub: (n, modes, d) => `${n} ${n === 1 ? "Inserat" : "Inserate"} · ${modes}${d ? " · letzte Inseratsprüfung " + d : ""}`,
       modesTxt: { rent: "Miete", buy: "Kauf", both: "Miete und Kauf" },
       newSince: n => `${n} neu seit deinem letzten Besuch`,
-      head: ["Inserat hinzufügen", "Einstellungen"],
+      head: ["Inserat hinzufügen", "Einstellungen", "Über mich"],
       status: { new: "Neu", contacted: "Angefragt", "viewing-invited": "Zur Besichtigung eingeladen", "viewing-done": "Besichtigt", applied: "Beworben", "docs-requested": "Unterlagen angefordert", accepted: "Zusage", rejected: "Absage", dropped: "Gestrichen", gone: "Weg" },
       mode: { rent: "Miete", buy: "Kauf" },
       placeMode: { car: "Auto", transit: "ÖPNV", bike: "Rad" },
@@ -490,7 +541,7 @@ body.setup .wrap{display:none}
       search: "Titel, Adresse oder Stadtteil suchen", savedOnly: "Nur vorgemerkte", inCriteria: "Nur Inserate, die zu meinen Kriterien passen", hideOut: "Absagen, Gestrichene und Weggefallene ausblenden",
       sortOpts: { rec: "Empfehlung", score: "Punkte", price: "Preis", ppsqm: "Preis pro m²", size: "Fläche (größte)", commute: p => p ? `Weg zu ${p}` : "Weg zum ersten Ort", newest: "Neueste" },
       kpiMatch: "Inserate passen", tracked: n => `${n} erfasst`, kpiBest: "beste Wertung", kpiCheapRent: "günstigste Warmmiete", kpiCheapBuy: "günstigster Kaufpreis", kpiLargest: "größte", kpiCommute: p => `kürzester Weg zu ${p}`,
-      nav: { decision: "Im Fokus", listings: "Inserate", costs: "Kosten", explore: "Karte & Diagramm", compare: "Vergleich" },
+      nav: { aboutme: "Über mich", decision: "Im Fokus", listings: "Inserate", costs: "Kosten", explore: "Karte & Diagramm", compare: "Vergleich" },
       focus: "Inserate für die engere Auswahl", focusHint: "Zuerst vorgemerkte Inserate, dann die bestbewerteten verfügbaren. Punkte fassen die Daten zusammen; die Wohnung vor der Entscheidung ansehen.", noFocus: "Keine verfügbaren Inserate passen zu den Filtern.", details: "Details öffnen", score: "Punkte", perMonth: "/Monat", loanMonth: "Kredit/Monat",
       map: "Wo sie liegen", radius: "Suchradius", scoreHigh: "≥ 70 gut", scoreMid: "55–69 okay", scoreLow: "< 55 schwach",
       chart: m => m === "buy" ? "Kaufpreis vs. Fläche, Farbe = Punkte" : "Warmmiete vs. Fläche, Farbe = Punkte", limitRent: "max. Warmmiete", limitBuy: "max. Kaufpreis", noChart: "Noch keine Inserate mit Fläche und Preis.",
@@ -526,7 +577,7 @@ body.setup .wrap{display:none}
       sub: (n, modes, d) => `${n} ${n === 1 ? "anúncio" : "anúncios"} · ${modes}${d ? " · última verificação dos anúncios " + d : ""}`,
       modesTxt: { rent: "aluguel", buy: "compra", both: "aluguel e compra" },
       newSince: n => `${n} novos desde sua última visita`,
-      head: ["Adicionar anúncio", "Configurações"],
+      head: ["Adicionar anúncio", "Configurações", "Sobre mim"],
       status: { new: "Novo", contacted: "Contatado", "viewing-invited": "Convite para visita", "viewing-done": "Visitado", applied: "Candidatura enviada", "docs-requested": "Documentos solicitados", accepted: "Aceito", rejected: "Recusado", dropped: "Descartado", gone: "Indisponível" },
       mode: { rent: "Aluguel", buy: "Compra" },
       placeMode: { car: "carro", transit: "transporte público", bike: "bicicleta" },
@@ -538,7 +589,7 @@ body.setup .wrap{display:none}
       search: "Buscar título, endereço ou bairro", savedOnly: "Só salvos", inCriteria: "Só anúncios dentro dos meus critérios", hideOut: "Ocultar recusados, descartados e indisponíveis",
       sortOpts: { rec: "Recomendação", score: "Pontuação", price: "Preço", ppsqm: "Preço por m²", size: "Área (maior)", commute: p => p ? `Trajeto até ${p}` : "Trajeto até o primeiro local", newest: "Mais recentes" },
       kpiMatch: "anúncios no filtro", tracked: n => `${n} registrados`, kpiBest: "melhor pontuação", kpiCheapRent: "aluguel total mais baixo", kpiCheapBuy: "preço mais baixo", kpiLargest: "maior", kpiCommute: p => `trajeto mais curto até ${p}`,
-      nav: { decision: "Destaques", listings: "Anúncios", costs: "Custos", explore: "Mapa e gráfico", compare: "Comparar" },
+      nav: { aboutme: "Sobre mim", decision: "Destaques", listings: "Anúncios", costs: "Custos", explore: "Mapa e gráfico", compare: "Comparar" },
       focus: "Anúncios para olhar de perto", focusHint: "Primeiro os salvos, depois os disponíveis com melhor pontuação. A pontuação resume os dados; visite o apartamento antes de decidir.", noFocus: "Nenhum anúncio disponível corresponde aos filtros.", details: "Abrir detalhes", score: "pontos", perMonth: "/mês", loanMonth: "parcela/mês",
       map: "Onde ficam", radius: "Raio de busca", scoreHigh: "≥ 70 bom", scoreMid: "55–69 razoável", scoreLow: "< 55 fraco",
       chart: m => m === "buy" ? "Preço vs. área, cor = pontuação" : "Aluguel total vs. área, cor = pontuação", limitRent: "aluguel total máx.", limitBuy: "preço máx.", noChart: "Ainda não há anúncios com área e preço.",
@@ -752,6 +803,23 @@ body.setup .wrap{display:none}
   }
 
   // ---------- header ----------
+  // ---------- About me (applicant profile and document vault, public/vault-ui.js) ----------
+  // Mounted when it opens, on a language change and when the page languages change; not on the 60-second refresh,
+  // so unsaved edits in the form survive.
+  let aboutOpen = false; try { aboutOpen = localStorage.getItem("flathunt-aboutme") === "1"; } catch (e) {}
+  let aboutMounted = "";
+  function syncAbout() {
+    const host = $("#aboutme"); host.hidden = !aboutOpen;
+    if (!aboutOpen) { aboutMounted = ""; host.replaceChildren(); return; }
+    const key = lang + "|" + ((P && P.languages) || []).join(",");
+    if (aboutMounted === key) return;
+    aboutMounted = key; VaultUI.mountAbout(host, { lang });
+  }
+  function toggleAbout() {
+    aboutOpen = !aboutOpen; try { localStorage.setItem("flathunt-aboutme", aboutOpen ? "1" : "0"); } catch (e) {}
+    renderHeader(); syncAbout();
+    if (aboutOpen) $("#aboutme").scrollIntoView({ block: "start", behavior: "smooth" });
+  }
   const openSettings = () => Setup.open({ mode: "settings", lang, onSaved: () => load() });
   const addListing = () => Setup.addListing({ lang, onSaved: () => load() });
   const scoreTxt = c => c.score == null ? "–" : (c.scoreEstimated ? "≈" : "") + c.score;
@@ -778,10 +846,11 @@ body.setup .wrap{display:none}
     p.onclick = () => { lastVisit = new Date().toISOString(); try { localStorage.setItem("flathunt-lastvisit", lastVisit); } catch (e) {} render(); };
     $("#addlisting").textContent = T.head[0]; $("#addlisting").onclick = addListing;
     $("#settings").textContent = T.head[1]; $("#settings").onclick = openSettings;
+    const ab = $("#aboutbtn"); ab.textContent = T.head[2]; ab.setAttribute("aria-pressed", aboutOpen); ab.onclick = () => toggleAbout();
     $("#maptitle").textContent = T.map; $("#listtitle").textContent = T.list; $("#cmptitle").textContent = T.cmp; $("#howto").textContent = T.howto;
     // Jump links only for sections that currently have content.
     const any = listings.length > 0;
-    const has = { decision: any, listings: any, costs: any, explore: any, compare: costSelected.some(id => listings.some(c => c.id === id)) };
+    const has = { aboutme: aboutOpen, decision: any, listings: any, costs: any, explore: any, compare: costSelected.some(id => listings.some(c => c.id === id)) };
     const nav = $("#jumpnav"); nav.innerHTML = ""; Object.keys(has).filter(id => has[id]).forEach(id => { const a = el("a", null, T.nav[id]); a.href = "#" + id; nav.append(a); }); nav.hidden = !nav.childElementCount;
     // Phone bar: filter toggle with the number of active filters, and map/chart tabs.
     const active = F.statuses.size + !!F.query + F.savedOnly + (bothModes() && F.mode !== "all") + (P.modes.rent && F.maxWarm < DEF.maxWarm) + (P.modes.buy && F.maxPrice < DEF.maxPrice) + !!F.minRooms + !!F.minSize + !F.inCriteria + !F.hideOut;
@@ -1147,7 +1216,7 @@ body.setup .wrap{display:none}
   }
 
   function render() {
-    T = I18N[lang]; const list = visible(); renderHeader(); renderFilters(); renderWelcome(); renderStale();
+    T = I18N[lang]; const list = visible(); renderHeader(); renderFilters(); renderWelcome(); renderStale(); syncAbout();
     if (!listings.length) return;
     renderKpis(list); renderDecision(list); renderMap(list); renderChart(list); renderUpdates(); renderCosts(list); renderList(list); renderTable();
     $("#compare").hidden = !costSelected.some(id => listings.some(c => c.id === id));

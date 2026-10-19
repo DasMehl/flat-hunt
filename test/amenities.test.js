@@ -139,3 +139,77 @@ test("an oversized Overpass answer is refused", async () => {
   const f = async () => ({ ok: true, status: 200, headers: { get: k => k === "content-length" ? String(50 * 1024 * 1024) : null }, text: async () => "{}" });
   await assert.rejects(A.amenitiesAt(P, { fetchImpl: f, overpass: createSpacer(0), ...noWait }), /too large/);
 });
+
+const okTable = (n, dur = 300) => reply({ code: "Ok", durations: [[0, ...Array(n).fill(dur)]], distances: [[0, ...Array(n).fill(400)]] });
+
+test("places beyond their radius are dropped after re-measuring; ways get 50 m tolerance", async () => {
+  const at = (m) => ({ lat: P.lat + m / 111195, lon: P.lon });
+  const els = { elements: [
+    { type: "node", id: 1, ...at(1040), tags: { shop: "supermarket", name: "Too far node" } },
+    { type: "way", id: 2, center: at(1040), tags: { leisure: "park", name: "Big park" } },
+    { type: "node", id: 3, ...at(540), tags: { highway: "bus_stop", name: "Far stop" } },
+    { type: "node", id: 4, ...at(400), tags: { highway: "bus_stop", name: "Near stop" } }
+  ] };
+  const r = await A.amenitiesAt(P, { fetchImpl: async u => u.includes("overpass") ? reply(els) : okTable(2), overpass: createSpacer(0), ...noWait });
+  assert.equal(r.items.supermarket, null);
+  assert.equal(r.items.park.name, "Big park");
+  assert.equal(r.items.transit.name, "Near stop");
+});
+
+test("the cache keeps the nearest 10 per category", async () => {
+  const els = { elements: Array.from({ length: 15 }, (_, i) => ({ type: "node", id: 100 + i, lat: P.lat + (i + 1) * 0.0001, lon: P.lon, tags: { shop: "supermarket", name: "M" + i } })) };
+  const cache = createAreaCache(path.join(tmp(), "c.json"));
+  await A.amenitiesAt(P, { fetchImpl: async u => u.includes("overpass") ? reply(els) : okTable(3), cache, overpass: createSpacer(0), ...noWait });
+  assert.equal(cache.get(P.lat, P.lon).value.length, 10);
+});
+
+test("more stop kinds, healthcare=doctor, relation platforms; only public-transport route relations give lines", () => {
+  const q = A.overpassQuery(51.2254, 6.7787);
+  assert.match(q, /\[highway=bus_stop\]/);
+  assert.match(q, /\[railway~"\^\(tram_stop\|station\|halt\)\$"\]/);
+  assert.match(q, /rel\(br\.p\)/);
+  const pois = A.parseOverpass({ elements: [
+    { type: "node", id: 1, lat: 51.2255, lon: 6.7787, tags: { railway: "tram_stop", name: "T" } },
+    { type: "node", id: 2, lat: 51.2256, lon: 6.7787, tags: { healthcare: "doctor", name: "Dr" } },
+    { type: "relation", id: 3, center: { lat: 51.2257, lon: 6.7787 }, tags: { public_transport: "platform", name: "Rel platform" } },
+    { type: "relation", id: 10, members: [{ type: "node", ref: 1 }, { type: "node", ref: 1 }], tags: { type: "route", route: "tram", ref: "U79" } },
+    { type: "relation", id: 11, members: [{ type: "node", ref: 1 }], tags: { type: "route", route: "tram", ref: "U79" } },
+    { type: "relation", id: 12, members: [{ type: "node", ref: 1 }], tags: { type: "route", route: "hiking", ref: "X1" } }
+  ] }, P);
+  assert.deepEqual(pois.map(p => p.cat).sort(), ["doctors", "transit", "transit"]);
+  assert.deepEqual(pois.find(p => p.id === "node/1").lines, [{ ref: "U79", mode: "tram" }]);
+});
+
+test("summarise prefers a routed candidate over an estimated one", () => {
+  const c = [{ id: "a", cat: "park", name: "Near", meters: 100 }, { id: "b", cat: "park", name: "Routed", meters: 900 }];
+  const r = A.summarise(c, { durations: [NaN, 600], distances: [NaN, 800] });
+  assert.equal(r.park.name, "Routed");
+  assert.equal(r.park.estimated, false);
+});
+
+test("Retry-After longer than the delay is honoured", async () => {
+  let n = 0; const waits = [];
+  const f = async u => {
+    if (!u.includes("overpass")) return okTable(5);
+    return ++n === 1 ? { ...reply({}, 429), headers: { get: k => k.toLowerCase() === "retry-after" ? "90" : null } } : reply(OVERPASS);
+  };
+  await A.amenitiesAt(P, { fetchImpl: f, overpass: createSpacer(0), delays: [], overpassDelays: [30000], sleep: async ms => { waits.push(ms); } });
+  assert.deepEqual(waits, [90000]);
+});
+
+test("partial foot-router nulls fall back to an estimate per place", async () => {
+  const f = async u => u.includes("overpass") ? reply(OVERPASS) : reply({ code: "Ok", durations: [[0, null, 240, null, null, null, null]], distances: [[0, null, 300, null, null, null, null]] });
+  const r = await A.amenitiesAt(P, { fetchImpl: f, overpass: createSpacer(0), ...noWait });
+  assert.equal(r.routed, true);
+  assert.ok(Object.values(r.items).some(i => i && i.estimated === true));
+  assert.ok(Object.values(r.items).some(i => i && i.estimated === false));
+});
+
+test("malformed cache entries are ignored on load", async () => {
+  const file = path.join(tmp(), "c.json");
+  fs.writeFileSync(file, JSON.stringify({ entries: { a: null, b: { at: 5, value: [] }, c: { at: "2026-10-21T00:00:00Z", value: "x" }, d: { at: "2026-10-21T00:00:00Z", value: [1] } } }));
+  const c = createAreaCache(file, { now: () => new Date("2026-10-22T00:00:00Z") });
+  assert.equal(c.size(), 1);
+  await c.set(51.2254, 6.7787, [2]);
+  assert.equal(c.size(), 2);
+});

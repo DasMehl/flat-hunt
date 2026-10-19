@@ -122,10 +122,10 @@ test("the catalogue has the six entries with en/de/pt texts", () => {
 test("each text red flag matches typical wording in title, notes or description", () => {
   const p = on(catalogue.map(d => d.id));
   const cases = {
-    "deposit-before-viewing": ["Bitte die Kaution vor der Besichtigung überweisen.", "Please pay the deposit before the viewing."],
+    "deposit-before-viewing": ["Bitte die Kaution vor der Besichtigung überweisen.", "Please pay the deposit before the viewing.", "Bitte überweisen Sie die Kaution vor der Besichtigung", "Reservierungsgebühr von 200 € vor dem Besichtigungstermin", "Vor der Besichtigung bitte 300 € Anzahlung überweisen."],
     "owner-abroad": ["Ich wohne zurzeit im Ausland, die Schlüssel schicke ich per Post.", "I am abroad, keys will be sent by courier."],
-    "odd-payment": ["Zahlung per Western Union", "Payment in Bitcoin or gift cards only", "MoneyGram transfer"],
-    "id-before-contact": ["Vor dem ersten Kontakt bitte eine Kopie Ihres Personalausweises senden.", "Send a copy of your passport before we talk."],
+    "odd-payment": ["Zahlung per Western Union", "Payment in Bitcoin or gift cards only", "MoneyGram transfer", "Bitte bezahlen Sie mit Amazon-Gutscheinen", "Zahlung per Steam-Karte"],
+    "id-before-contact": ["Vor dem ersten Kontakt bitte eine Kopie Ihres Personalausweises senden.", "Send a copy of your passport before we talk.", "Senden Sie mir zuerst eine Kopie Ihres Personalausweises, dann schicke ich die Adresse", "Ausweiskopie bitte vor der Besichtigung schicken"],
     "viewing-fee": ["Besichtigung nur gegen Gebühr", "There is a viewing fee of 50 EUR."]
   };
   for (const [id, texts] of Object.entries(cases)) {
@@ -136,6 +136,23 @@ test("each text red flag matches typical wording in title, notes or description"
   }
   assert.ok(flagIds(flat({ title: "Viewing fee required" }), p).includes("viewing-fee"));
   assert.deepEqual(flagIds(flat({ notes: "Lovely flat near the park, viewing on Saturday, deposit three cold rents." }), p), []);
+});
+
+test("normal listing wording triggers no red flag", () => {
+  const p = on(catalogue.map(d => d.id));
+  const benign = [
+    "Kaution: 3 Monatsmieten",
+    "Besichtigung nach Vereinbarung",
+    "Bitte Ausweis, Schufa und Gehaltsnachweise vorlegen",
+    "Die Kaution ist vor Schlüsselübergabe zu zahlen",
+    "Kaution 2.100 EUR, Bezug vorbehaltlich Besichtigung",
+    "Vor der Besichtigung bitte die Anzahl der Personen angeben",
+    "500 € Umzugsgutschein für Neumieter",
+    "Ausweis ist bei der Besichtigung vorzuzeigen",
+    "Bitte Einkommen (Zahlungseingänge) der letzten drei Monate nachweisen",
+    "Einbauküche vorhanden, Vorstellung der Mieter beim Termin"
+  ];
+  for (const t of benign) assert.deepEqual(flagIds(flat({ notes: t }), p), [], t);
 });
 
 test("flags that are off, or missing from the profile with default off, do not hit; defaults apply when missing", () => {

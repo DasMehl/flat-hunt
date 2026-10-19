@@ -164,6 +164,17 @@ function createApp(options = {}) {
     }
   }
 
+  // An edit plus its derived warm rent: a new cold rent or utilities gives warm = cold + utilities, the warm rent the
+  // edit sets itself, or none when neither is available.
+  function applyEdit(l, v) {
+    applyInput(l, v);
+    if (("coldRent" in v || "utilities" in v) && !("warmRent" in v)) {
+      if (l.coldRent != null && l.utilities != null) l.warmRent = l.coldRent + l.utilities; else delete l.warmRent;
+    }
+  }
+  // A price-history entry; rent entries also keep the cold rent.
+  const historyEntry = (l, date) => l.mode === "rent" && l.coldRent != null ? { date, price: headline(l), coldRent: l.coldRent } : { date, price: headline(l) };
+
   const slug = s => String(s).normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/ß/g, "ss").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 70);
 
   app.get("/api/geocode", async (req, res) => {
@@ -181,7 +192,7 @@ function createApp(options = {}) {
     const listing = { photos: [], source: "manual", status: "new", pick: false, notes: "", nextStep: "", messages: [], addedAt: d, lastSeenAt: d };
     applyInput(listing, v);
     if (listing.mode === "rent" && listing.warmRent == null && warmRent(listing) != null) listing.warmRent = warmRent(listing);
-    listing.priceHistory = [{ date: d, price: headline(listing) }];
+    listing.priceHistory = [historyEntry(listing, d)];
     Object.assign(listing, await locate(placeQuery(listing)));
     // Id is chosen and stored synchronously, after the last await, so concurrent adds cannot share one.
     let id = slug(listing.title + " " + (listing.city || listing.address || "")) || "listing";
@@ -234,8 +245,8 @@ function createApp(options = {}) {
     const { errors, value: v } = validateListingInput(req.body, { partial: true });
     if (errors.length) return res.status(400).json({ error: "invalid listing", details: errors });
     const merged = { ...state.listings[id] };
-    applyInput(merged, v);
-    const amountTouched = ["mode", "coldRent", "warmRent", "price", ...ADDRESS_FIELDS].some(k => k in v);
+    applyEdit(merged, v);
+    const amountTouched = ["mode", "coldRent", "utilities", "warmRent", "price", ...ADDRESS_FIELDS].some(k => k in v);
     const mergedErrors = amountTouched ? requiredErrors(merged) : [];
     if (mergedErrors.length) return res.status(400).json({ error: "invalid listing", details: mergedErrors });
     const moved = ADDRESS_FIELDS.some(k => k in v && v[k] !== state.listings[id][k]);
@@ -244,14 +255,16 @@ function createApp(options = {}) {
     const c = state.listings[id];
     if (!c) return res.status(404).json({ error: "unknown listing" });
     const prev = structuredClone(c), d = today(), before = headline(c);
-    applyInput(c, v);
-    // A new cold rent or utilities recomputes the warm rent unless the edit sets it too.
-    if (("coldRent" in v || "utilities" in v) && !("warmRent" in v) && c.coldRent != null && c.utilities != null) c.warmRent = c.coldRent + c.utilities;
-    const after = headline(c);
+    const coldBefore = c.mode === "rent" ? c.coldRent ?? null : null;
+    applyEdit(c, v);
+    const after = headline(c), coldAfter = c.mode === "rent" ? c.coldRent ?? null : null;
+    // The headline (price, else warm rent, else cold rent) is logged when it changes; otherwise a cold-rent change.
+    const field = c.mode === "buy" ? "price" : c.warmRent != null ? "warmRent" : "coldRent";
     let entry = null;
-    if (after != null && after !== before) {
-      entry = { date: d, type: "price", id, text: c.title, from: before, to: after };
-      c.priceHistory = [...(c.priceHistory || []), { date: d, price: after }];
+    if (after != null && after !== before) entry = { date: d, type: "price", field, id, text: c.title, from: before, to: after };
+    else if (coldAfter != null && coldBefore != null && coldAfter !== coldBefore) entry = { date: d, type: "price", field: "coldRent", id, text: c.title, from: coldBefore, to: coldAfter };
+    if (entry) {
+      c.priceHistory = [...(c.priceHistory || []), historyEntry(c, d)];
       state.meta.log.unshift(entry);
     }
     if (place) {

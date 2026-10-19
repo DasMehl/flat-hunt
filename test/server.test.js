@@ -336,6 +336,31 @@ test("editing the rent recomputes warm rent, appends to the price history and lo
   } finally { await s.close(); }
 });
 
+test("clearing utilities recomputes warm rent; a cold-rent change is tracked even with an explicit warm rent", async () => {
+  const s = await start({ fetchImpl: failFetch });
+  try {
+    const { id } = await addManual(s);
+    const cleared = (await (await editListing(s, id, { utilities: null })).json()).listing;
+    assert.equal(cleared.utilities, undefined);
+    assert.equal(cleared.warmRent, undefined);
+    const explicit = (await (await editListing(s, id, { utilities: null, warmRent: 990 })).json()).listing;
+    assert.equal(explicit.warmRent, 990);
+    const before = explicit.priceHistory.length;
+    const cold = (await (await editListing(s, id, { coldRent: 790, warmRent: 990 })).json()).listing;
+    assert.equal(cold.coldRent, 790);
+    assert.equal(cold.warmRent, 990);
+    assert.equal(cold.priceHistory.length, before + 1);
+    assert.equal(cold.priceHistory.at(-1).coldRent, 790);
+    const meta = await (await fetch(s.base + "/api/meta", { headers: s.auth })).json();
+    assert.deepEqual([meta.log[0].type, meta.log[0].field, meta.log[0].from, meta.log[0].to], ["price", "coldRent", 750, 790]);
+    // Without utilities a new cold rent cannot give a warm rent, so clearing cold rent alone leaves no rent at all.
+    assert.equal((await editListing(s, id, { coldRent: null })).status, 400);
+    const warmOnly = (await (await editListing(s, id, { coldRent: null, warmRent: 990 })).json()).listing;
+    assert.equal(warmOnly.coldRent, undefined);
+    assert.equal(warmOnly.warmRent, 990);
+  } finally { await s.close(); }
+});
+
 test("editing a buy listing's price logs it; switching mode needs the other mode's amount", async () => {
   const s = await start({ fetchImpl: failFetch });
   try {

@@ -7,10 +7,13 @@ const { readJson, writeJsonAtomic } = require("./lib/store");
 const { validateProfile } = require("./lib/profile");
 const { geocode } = require("./lib/geo");
 const { commuteFor } = require("./lib/commute");
+const { validateListingInput, requiredErrors } = require("./lib/listing");
+const { warmRent } = require("./public/money");
 
 const STATUSES = ["new", "contacted", "viewing-invited", "viewing-done", "applied", "docs-requested", "accepted", "rejected", "dropped", "gone"];
-const LISTING_FIELDS = ["title", "shortName", "displayTitle", "make", "model", "fuel", "engine", "facelift", "variant", "trim", "colour", "price", "negotiable", "km", "regMonth", "regYear", "hp", "gearbox", "dsgType", "hu", "owners", "serviceHistory", "timingBelt", "dsgOil", "docsReview", "carplay", "carplayStatus", "camera", "location", "city", "distanceKm", "airKm", "roadKm", "driveMin", "transitMin", "transitCheckedAt", "transitSource", "transitDestination", "transitApproximate", "lat", "lon", "bahnUrl", "mapsUrl", "sellerName", "sellerType", "phone", "url", "kleinanzeigenUrl", "photos", "verdict", "pros", "cons", "questions", "i18n", "equip", "score", "rating", "replyAssessment", "visit", "order", "addedAt", "lastSeenAt", "priceHistory", "gone", "source"];
-const LINK_FIELDS = ["url", "mapsUrl", "bahnUrl", "kleinanzeigenUrl"];
+// Fields the routine may write with the sync key (PUT /api/listings/:id). Owner fields stay page-only.
+const LISTING_FIELDS = ["title", "url", "source", "mode", "coldRent", "utilities", "warmRent", "deposit", "takeover", "price", "rooms", "size", "floor", "lift", "outdoor", "kitchen", "petsAllowed", "availableFrom", "wbsRequired", "address", "postcode", "city", "district", "description", "lat", "lon", "mapsUrl", "commute", "commuteStale", "area", "contact", "photos", "rating", "redFlags", "verdict", "pros", "cons", "questions", "i18n", "addedAt", "lastSeenAt", "priceHistory", "gone"];
+const LINK_FIELDS = ["url", "mapsUrl"];
 const isHttpUrl = v => typeof v === "string" && /^https?:\/\//i.test(v);
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -130,26 +133,11 @@ function createApp(options = {}) {
     }
   });
 
-  // Validates listing facts as the add-listing dialog sends them. With partial, every field is optional
-  // and only the ones present are checked (PATCH /api/listings/:id/listing).
-  function checkListing(b, partial) {
-    const errors = [], has = k => !partial || k in b;
-    const s = (k, max, opt) => { if (!has(k) || (opt && (b[k] == null || b[k] === ""))) return; if (typeof b[k] !== "string" || !b[k].trim() || b[k].length > max) errors.push(`${k}: text expected`); };
-    const n = (k, min, max, opt) => { if (!has(k) || (opt && b[k] == null)) return; if (!Number.isInteger(b[k]) || b[k] < min || b[k] > max) errors.push(`${k}: whole number ${min}–${max} expected`); };
-    s("title", 120); s("town", 120); s("notes", 5000, true);
-    if (has("url") && (typeof b.url !== "string" || !/^https:\/\/[^\s]{4,500}$/.test(b.url))) errors.push("url: https link expected");
-    n("price", 0, 1000000); n("km", 0, 2000000); n("regYear", 1980, 2100); n("regMonth", 1, 12, true); n("hp", 1, 2000, true);
-    if (has("fuel") && !["diesel", "petrol", "hybrid", "plugin", "electric", "lpg"].includes(b.fuel)) errors.push("fuel: unknown");
-    if (has("gearbox") && !["automatic", "manual"].includes(b.gearbox)) errors.push("gearbox: automatic or manual expected");
-    if ("negotiable" in b && typeof b.negotiable !== "boolean") errors.push("negotiable: true or false expected");
-    return errors;
-  }
-
-  // Coordinates, commute to each of the profile's places and a route link for a town; fields stay absent when lookup fails.
-  async function locate(town) {
+  // Coordinates, commute to each of the profile's places and a route link for an address; fields stay absent when lookup fails.
+  async function locate(query) {
     const out = {};
     try {
-      const where = await geocode(town, app.locals.fetchImpl);
+      const where = await geocode(query, app.locals.fetchImpl);
       if (where) {
         out.lat = where.lat; out.lon = where.lon;
         const places = (state.profile && state.profile.places) || [];
@@ -158,6 +146,22 @@ function createApp(options = {}) {
       }
     } catch (e) { /* commute stays empty */ }
     return out;
+  }
+
+  // Geocoding query from the address fields: "street, postcode city", any part may be missing.
+  const placeQuery = l => [l.address, [l.postcode, l.city].filter(Boolean).join(" ")].filter(Boolean).join(", ");
+  // The amount a listing is tracked by: purchase price when buying, warm (else cold) rent when renting.
+  const headline = l => l.mode === "buy" ? l.price ?? null : warmRent(l) ?? l.coldRent ?? null;
+  // Copies validated input onto a listing; null clears a field. Contact name and type live in listing.contact.
+  function applyInput(l, v) {
+    for (const [k, x] of Object.entries(v)) {
+      if (k === "contactName" || k === "contactType") {
+        const c = { ...(l.contact || {}) }, key = k === "contactName" ? "name" : "type";
+        if (x === null) delete c[key]; else c[key] = x;
+        if (Object.keys(c).length) l.contact = c; else delete l.contact;
+      } else if (x === null) delete l[k];
+      else l[k] = x;
+    }
   }
 
   const slug = s => String(s).normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/ß/g, "ss").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 70);
@@ -170,22 +174,20 @@ function createApp(options = {}) {
   });
 
   app.post("/api/listings", async (req, res) => {
-    const b = req.body || {}, errors = checkListing(b);
+    const { errors, value: v } = validateListingInput(req.body);
     if (errors.length) return res.status(400).json({ error: "invalid listing", details: errors });
 
     const d = today();
-    const car = {
-      title: b.title.trim(), displayTitle: `${b.title.trim()} · ${b.regYear}`, model: b.title.trim(), fuel: b.fuel,
-      gearbox: b.gearbox === "automatic" ? "Automatic" : "Manual", price: b.price, negotiable: b.negotiable === true, km: b.km, regYear: b.regYear, regMonth: b.regMonth ?? null,
-      hp: b.hp ?? null, location: b.town.trim(), city: b.town.trim(), url: b.url, photos: [], source: "manual",
-      status: "new", pick: false, notes: b.notes || "", nextStep: "", messages: [], addedAt: d, lastSeenAt: d, priceHistory: [{ date: d, price: b.price }]
-    };
-    Object.assign(car, await locate(b.town));
+    const listing = { photos: [], source: "manual", status: "new", pick: false, notes: "", nextStep: "", messages: [], addedAt: d, lastSeenAt: d };
+    applyInput(listing, v);
+    if (listing.mode === "rent" && listing.warmRent == null && warmRent(listing) != null) listing.warmRent = warmRent(listing);
+    listing.priceHistory = [{ date: d, price: headline(listing) }];
+    Object.assign(listing, await locate(placeQuery(listing)));
     // Id is chosen and stored synchronously, after the last await, so concurrent adds cannot share one.
-    let id = slug(b.title + " " + b.town) || "listing";
+    let id = slug(listing.title + " " + (listing.city || listing.address || "")) || "listing";
     if (state.listings[id]) { let i = 2; while (state.listings[`${id}-${i}`]) i++; id = `${id}-${i}`; }
-    state.listings[id] = car;
-    const entry = { date: d, type: "new", id, text: car.displayTitle, price: car.price };
+    state.listings[id] = listing;
+    const entry = { date: d, type: "new", id, text: listing.title, price: headline(listing) };
     state.meta.log.unshift(entry);
     try { await persist(); }
     catch (e) {
@@ -194,7 +196,7 @@ function createApp(options = {}) {
       if (at >= 0) state.meta.log.splice(at, 1);
       return res.status(500).json({ error: "save failed" });
     }
-    res.status(201).json({ ok: true, id, listing: car });
+    res.status(201).json({ ok: true, id, listing });
   });
 
   app.put("/api/img/:name", requireKey, express.raw({ type: ["image/jpeg", "image/png", "image/webp"], limit: "5mb" }), async (req, res) => {
@@ -222,36 +224,37 @@ function createApp(options = {}) {
     try { await persist(); res.json({ ok: true, listing: c }); } catch (e) { res.status(500).json({ error: "save failed" }); }
   });
 
-  const EDITABLE = ["url", "title", "price", "km", "regYear", "regMonth", "hp", "fuel", "gearbox", "town", "negotiable"];
-  // Fields that describe where the listing is; a new town makes all of them stale.
-  const PLACE_FIELDS = ["lat", "lon", "roadKm", "driveMin", "commute", "commuteStale", "mapsUrl", "distanceKm", "airKm", "transitMin", "transitCheckedAt", "transitSource", "transitDestination", "transitApproximate", "bahnUrl"];
+  // Fields that describe where the listing is; a new address makes all of them stale.
+  const PLACE_FIELDS = ["lat", "lon", "commute", "commuteStale", "mapsUrl"];
+  const ADDRESS_FIELDS = ["address", "postcode", "city"];
 
   app.patch("/api/listings/:id/listing", async (req, res) => {
-    const id = req.params.id, p = req.body;
+    const id = req.params.id;
     if (!state.listings[id]) return res.status(404).json({ error: "unknown listing" });
-    if (!p || typeof p !== "object" || Array.isArray(p)) return res.status(400).json({ error: "invalid update" });
-    if (Object.keys(p).some(k => !EDITABLE.includes(k))) return res.status(400).json({ error: "unsupported field" });
-    const errors = checkListing(p, true);
+    const { errors, value: v } = validateListingInput(req.body, { partial: true });
     if (errors.length) return res.status(400).json({ error: "invalid listing", details: errors });
-    const place = "town" in p ? await locate(p.town.trim()) : null;
+    const merged = { ...state.listings[id] };
+    applyInput(merged, v);
+    const amountTouched = ["mode", "coldRent", "warmRent", "price", ...ADDRESS_FIELDS].some(k => k in v);
+    const mergedErrors = amountTouched ? requiredErrors(merged) : [];
+    if (mergedErrors.length) return res.status(400).json({ error: "invalid listing", details: mergedErrors });
+    const moved = ADDRESS_FIELDS.some(k => k in v && v[k] !== state.listings[id][k]);
+    const place = moved ? await locate(placeQuery(merged)) : null;
     // Everything below runs without awaiting, so a concurrent delete or edit cannot interleave.
     const c = state.listings[id];
     if (!c) return res.status(404).json({ error: "unknown listing" });
-    const prev = structuredClone(c), d = today();
-    const manual = c.source === "manual";
-    for (const k of ["url", "km", "regYear", "regMonth", "hp", "fuel", "negotiable"]) if (k in p) c[k] = p[k];
-    if ("gearbox" in p) c.gearbox = p.gearbox === "automatic" ? "Automatic" : "Manual";
-    if ("title" in p) { c.title = p.title.trim(); if (manual) c.model = c.title; }
-    if ("title" in p || (manual && "regYear" in p)) c.displayTitle = c.regYear ? `${c.title} · ${c.regYear}` : c.title;
+    const prev = structuredClone(c), d = today(), before = headline(c);
+    applyInput(c, v);
+    // A new cold rent or utilities recomputes the warm rent unless the edit sets it too.
+    if (("coldRent" in v || "utilities" in v) && !("warmRent" in v) && c.coldRent != null && c.utilities != null) c.warmRent = c.coldRent + c.utilities;
+    const after = headline(c);
     let entry = null;
-    if ("price" in p && p.price !== c.price) {
-      entry = { date: d, type: "price", id, text: c.displayTitle || c.title, from: c.price ?? null, to: p.price };
-      c.priceHistory = [...(c.priceHistory || []), { date: d, price: p.price }];
-      c.price = p.price;
+    if (after != null && after !== before) {
+      entry = { date: d, type: "price", id, text: c.title, from: before, to: after };
+      c.priceHistory = [...(c.priceHistory || []), { date: d, price: after }];
       state.meta.log.unshift(entry);
     }
     if (place) {
-      c.location = c.city = p.town.trim();
       for (const k of PLACE_FIELDS) delete c[k];
       Object.assign(c, place);
     }
@@ -295,7 +298,7 @@ function createApp(options = {}) {
     const prev = state.listings[id];
     state.listings[id] = prev ? { ...prev, ...listing } : { status: "new", pick: false, notes: "", nextStep: "", messages: [], addedAt: today(), ...listing };
     if (!prev && typeof incoming.pick === "boolean") state.listings[id].pick = incoming.pick;
-    if (!prev) state.meta.log.unshift({ date: today(), type: "new", id, text: state.listings[id].displayTitle || state.listings[id].title, price: state.listings[id].price });
+    if (!prev) state.meta.log.unshift({ date: today(), type: "new", id, text: state.listings[id].title, price: headline(state.listings[id]) });
     try { await persist(); } catch (e) { return res.status(500).json({ error: "save failed" }); }
     res.json({ ok: true, created: !prev });
   });
@@ -317,11 +320,10 @@ function createApp(options = {}) {
       const s = seen[id];
       if (s) {
         c.lastSeenAt = d;
-        if (c.gone) { c.gone = false; changes.push({ date: d, type: "back", id, text: c.displayTitle }); }
-        if (s.price && s.price !== c.price) { c.priceHistory = [...(c.priceHistory || []), { date: d, price: s.price }]; changes.push({ date: d, type: "price", id, text: c.displayTitle, from: c.price, to: s.price }); c.price = s.price; }
-        if (s.km && s.km !== c.km) c.km = s.km;
+        if (c.gone) { c.gone = false; changes.push({ date: d, type: "back", id, text: c.title }); }
+        if (s.price && s.price !== c.price) { c.priceHistory = [...(c.priceHistory || []), { date: d, price: s.price }]; changes.push({ date: d, type: "price", id, text: c.title, from: c.price, to: s.price }); c.price = s.price; }
       } else if (req.body.complete && c.source !== "manual" && !c.gone && !["rejected", "dropped", "accepted", "gone"].includes(c.status)) {
-        c.gone = true; c.goneAt = d; changes.push({ date: d, type: "gone", id, text: c.displayTitle });
+        c.gone = true; c.goneAt = d; changes.push({ date: d, type: "gone", id, text: c.title });
       }
     }
     state.meta.lastCheck = req.body.checkedAt || new Date().toISOString();

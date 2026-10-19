@@ -110,22 +110,22 @@ test("photos upload to DATA_DIR/img and are served from /img", async () => {
 const geoFetch = async url => ({ ok: true, status: 200, json: async () => url.includes("nominatim") ? [{ display_name: "45127 Essen", lat: "51.4556", lon: "7.0116" }] : { routes: [{ distance: 36000, duration: 1920 }] } });
 const failFetch = async () => { throw new Error("offline"); };
 const homeProfile = () => { const p = defaultProfile(); p.places = [{ label: "Büro", address: "Königsallee 1, 40212 Düsseldorf", lat: 51.2254, lon: 6.7787, mode: "car", maxMin: 45, time: "08:00" }]; return p; };
-const newCar = { url: "https://suchen.mobile.de/fahrzeuge/details.html?id=123", title: "VW Golf 7 Variant 2.0 TDI", price: 9900, km: 150000, regYear: 2016, fuel: "diesel", gearbox: "automatic", town: "45127 Essen" };
+const newFlat = { url: "https://www.immowelt.de/expose/abc123", title: "Bright 2-room flat with balcony", mode: "rent", coldRent: 750, utilities: 180, rooms: 2, size: 58, postcode: "45127", city: "Essen" };
 
 test("manual add geocodes the town and computes the drive", async () => {
   const s = await start({ fetchImpl: geoFetch });
   try {
     await fetch(s.base + "/api/profile", { method: "PUT", headers: json(s.auth), body: JSON.stringify(homeProfile()) });
-    const r = await fetch(s.base + "/api/listings", { method: "POST", headers: json(s.auth), body: JSON.stringify(newCar) });
+    const r = await fetch(s.base + "/api/listings", { method: "POST", headers: json(s.auth), body: JSON.stringify(newFlat) });
     assert.equal(r.status, 201);
     const { id, listing: car } = await r.json();
-    assert.equal(id, "vw-golf-7-variant-2-0-tdi-45127-essen");
+    assert.equal(id, "bright-2-room-flat-with-balcony-essen");
     assert.equal(car.commute.length, 1);
     assert.equal(car.commute[0].minutes, 32);
     assert.match(car.commute[0].checkedAt, /^\d{4}-\d\d-\d\dT/);
     assert.match(car.mapsUrl, /origin=.*destination=51\.4556,7\.0116$/);
     assert.equal(car.status, "new");
-    const again = await (await fetch(s.base + "/api/listings", { method: "POST", headers: json(s.auth), body: JSON.stringify(newCar) })).json();
+    const again = await (await fetch(s.base + "/api/listings", { method: "POST", headers: json(s.auth), body: JSON.stringify(newFlat) })).json();
     assert.equal(again.id, id + "-2");
   } finally { await s.close(); }
 });
@@ -134,10 +134,10 @@ test("manual add still saves when geocoding fails, and validates input", async (
   const s = await start({ fetchImpl: failFetch });
   try {
     await fetch(s.base + "/api/profile", { method: "PUT", headers: json(s.auth), body: JSON.stringify(homeProfile()) });
-    const r = await fetch(s.base + "/api/listings", { method: "POST", headers: json(s.auth), body: JSON.stringify(newCar) });
+    const r = await fetch(s.base + "/api/listings", { method: "POST", headers: json(s.auth), body: JSON.stringify(newFlat) });
     assert.equal(r.status, 201);
     assert.equal((await r.json()).listing.commute, undefined);
-    const bad = await fetch(s.base + "/api/listings", { method: "POST", headers: json(s.auth), body: JSON.stringify({ ...newCar, price: "cheap", url: "javascript:alert(1)" }) });
+    const bad = await fetch(s.base + "/api/listings", { method: "POST", headers: json(s.auth), body: JSON.stringify({ ...newFlat, coldRent: "cheap", url: "javascript:alert(1)" }) });
     assert.equal(bad.status, 400);
     assert.equal((await bad.json()).details.length, 2);
   } finally { await s.close(); }
@@ -156,7 +156,7 @@ test("concurrent manual adds of the same car get different ids", async () => {
   const slowGeo = async url => { await new Promise(r => setTimeout(r, 50)); return geoFetch(url); };
   const s = await start({ fetchImpl: slowGeo });
   try {
-    const post = () => fetch(s.base + "/api/listings", { method: "POST", headers: json(s.auth), body: JSON.stringify(newCar) });
+    const post = () => fetch(s.base + "/api/listings", { method: "POST", headers: json(s.auth), body: JSON.stringify(newFlat) });
     const [a, b] = await Promise.all([post(), post()]);
     assert.equal(a.status, 201);
     assert.equal(b.status, 201);
@@ -174,7 +174,7 @@ test("a failed manual-add save answers 500 and leaves no car or log entry behind
   try {
     fs.rmSync(path.join(s.dir, "listings.json"));
     fs.mkdirSync(path.join(s.dir, "listings.json")); // renaming a file onto a directory fails
-    const r = await fetch(s.base + "/api/listings", { method: "POST", headers: json(s.auth), body: JSON.stringify(newCar) });
+    const r = await fetch(s.base + "/api/listings", { method: "POST", headers: json(s.auth), body: JSON.stringify(newFlat) });
     assert.equal(r.status, 500);
     assert.deepEqual(await r.json(), { error: "save failed" });
     const cars = (await (await fetch(s.base + "/api/listings", { headers: s.auth })).json()).listings;
@@ -198,7 +198,7 @@ test("a profile name outside Latin-1 still gives a 401 with a password prompt", 
 test("sync with complete: true never marks a manually added car gone", async () => {
   const s = await start({ fetchImpl: failFetch });
   try {
-    const { id, listing: car } = await (await fetch(s.base + "/api/listings", { method: "POST", headers: json(s.auth), body: JSON.stringify(newCar) })).json();
+    const { id, listing: car } = await (await fetch(s.base + "/api/listings", { method: "POST", headers: json(s.auth), body: JSON.stringify(newFlat) })).json();
     assert.equal(car.source, "manual");
     await fetch(s.base + "/api/listings/routine-car", { method: "PUT", headers: s.sync, body: JSON.stringify({ title: "Routine car", price: 9000 }) });
     const r = await fetch(s.base + "/api/sync", { method: "POST", headers: s.sync, body: JSON.stringify({ seen: {}, complete: true }) });
@@ -245,28 +245,45 @@ test("PUT /api/meta accepts only lastCheck", async () => {
   } finally { await s.close(); }
 });
 
-test("manual add without regMonth or hp stores null", async () => {
+test("manual add computes warm rent, stores contact, source and the price history", async () => {
   const s = await start({ fetchImpl: failFetch });
   try {
-    const { listing: car } = await (await fetch(s.base + "/api/listings", { method: "POST", headers: json(s.auth), body: JSON.stringify(newCar) })).json();
-    assert.equal(car.regMonth, null);
-    assert.equal(car.hp, null);
-    assert.equal(car.negotiable, false);
-    const neg = await (await fetch(s.base + "/api/listings", { method: "POST", headers: json(s.auth), body: JSON.stringify({ ...newCar, negotiable: true }) })).json();
-    assert.equal(neg.listing.negotiable, true);
+    const { listing: l } = await (await fetch(s.base + "/api/listings", { method: "POST", headers: json(s.auth), body: JSON.stringify({ ...newFlat, contactName: "Ms Example", contactType: "agent", lift: true, notes: "Nice" }) })).json();
+    assert.equal(l.warmRent, 930);
+    assert.equal(l.source, "manual");
+    assert.deepEqual(l.contact, { name: "Ms Example", type: "agent" });
+    assert.equal(l.contactName, undefined);
+    assert.equal(l.lift, true);
+    assert.equal(l.notes, "Nice");
+    assert.deepEqual(l.priceHistory.map(p => p.price), [930]);
+    const meta = await (await fetch(s.base + "/api/meta", { headers: s.auth })).json();
+    assert.equal(meta.log[0].type, "new");
+    assert.equal(meta.log[0].price, 930);
+    const own = await (await fetch(s.base + "/api/listings", { method: "POST", headers: json(s.auth), body: JSON.stringify({ ...newFlat, coldRent: undefined, utilities: undefined, warmRent: 990 }) })).json();
+    assert.equal(own.listing.warmRent, 990);
+    const buy = await (await fetch(s.base + "/api/listings", { method: "POST", headers: json(s.auth), body: JSON.stringify({ url: "https://www.kleinanzeigen.de/s-anzeige/1", title: "Flat to buy", mode: "buy", price: 289000, rooms: 3, size: 82, address: "45127 Essen" }) })).json();
+    assert.deepEqual(buy.listing.priceHistory.map(p => p.price), [289000]);
+    assert.equal(buy.listing.warmRent, undefined);
+    const unknown = await fetch(s.base + "/api/listings", { method: "POST", headers: json(s.auth), body: JSON.stringify({ ...newFlat, fuel: "diesel" }) });
+    assert.equal(unknown.status, 400);
   } finally { await s.close(); }
 });
 
-test("PUT /api/listings drops link fields that are not http(s)", async () => {
+test("PUT /api/listings drops link fields that are not http(s) and fields a flat listing does not have", async () => {
   const s = await start();
   try {
-    const body = { title: "Links", url: "javascript:alert(1)", mapsUrl: "https://maps.example/x", bahnUrl: "data:text/html,x", kleinanzeigenUrl: 42 };
+    const body = { title: "Links", url: "javascript:alert(1)", mapsUrl: "https://maps.example/x", fuel: "diesel", km: 5, coldRent: 700, commute: [null], rating: { price: 7 }, redFlags: ["owner-abroad"], contact: { name: "A", type: "private" } };
     assert.equal((await fetch(s.base + "/api/listings/links", { method: "PUT", headers: s.sync, body: JSON.stringify(body) })).status, 200);
     const c = (await (await fetch(s.base + "/api/listings", { headers: s.auth })).json()).listings.links;
     assert.equal(c.url, undefined);
     assert.equal(c.mapsUrl, "https://maps.example/x");
-    assert.equal(c.bahnUrl, undefined);
-    assert.equal(c.kleinanzeigenUrl, undefined);
+    assert.equal(c.fuel, undefined);
+    assert.equal(c.km, undefined);
+    assert.equal(c.coldRent, 700);
+    assert.deepEqual(c.commute, [null]);
+    assert.deepEqual(c.rating, { price: 7 });
+    assert.deepEqual(c.redFlags, ["owner-abroad"]);
+    assert.deepEqual(c.contact, { name: "A", type: "private" });
     await fetch(s.base + "/api/listings/links", { method: "PUT", headers: s.sync, body: JSON.stringify({ url: "http://a.example/1" }) });
     await fetch(s.base + "/api/listings/links", { method: "PUT", headers: s.sync, body: JSON.stringify({ url: "javascript:x" }) });
     assert.equal((await (await fetch(s.base + "/api/listings", { headers: s.auth })).json()).listings.links.url, "http://a.example/1");
@@ -288,118 +305,132 @@ test("the server refuses to start without SITE_PASSWORD unless ALLOW_OPEN=1", ()
 
 // ---------- editing and deleting cars ----------
 const otherTownFetch = async url => ({ ok: true, status: 200, json: async () => url.includes("nominatim") ? [{ display_name: "50667 Köln", lat: "50.9384", lon: "6.9599" }] : { routes: [{ distance: 41000, duration: 2700 }] } });
-const addManual = async s => (await (await fetch(s.base + "/api/listings", { method: "POST", headers: json(s.auth), body: JSON.stringify(newCar) })).json());
+const addManual = async s => (await (await fetch(s.base + "/api/listings", { method: "POST", headers: json(s.auth), body: JSON.stringify(newFlat) })).json());
 const editListing = (s, id, body, headers = json(s.auth)) => fetch(s.base + "/api/listings/" + id + "/listing", { method: "PATCH", headers, body: JSON.stringify(body) });
 const breakSaves = s => { fs.rmSync(path.join(s.dir, "listings.json")); fs.mkdirSync(path.join(s.dir, "listings.json")); };
 
-test("editing the price appends to the price history and logs the change", async () => {
+test("editing the rent recomputes warm rent, appends to the price history and logs the change", async () => {
   const s = await start({ fetchImpl: failFetch });
   try {
     const { id } = await addManual(s);
-    const r = await editListing(s, id, { price: 9400 });
+    const r = await editListing(s, id, { coldRent: 800 });
     assert.equal(r.status, 200);
-    const { ok, listing: car } = await r.json();
+    const { ok, listing: l } = await r.json();
     assert.equal(ok, true);
-    assert.equal(car.price, 9400);
-    assert.deepEqual(car.priceHistory.map(p => p.price), [9900, 9400]);
+    assert.equal(l.coldRent, 800);
+    assert.equal(l.warmRent, 980);
+    assert.deepEqual(l.priceHistory.map(p => p.price), [930, 980]);
     const meta = await (await fetch(s.base + "/api/meta", { headers: s.auth })).json();
     assert.equal(meta.log[0].type, "price");
     assert.equal(meta.log[0].id, id);
-    assert.equal(meta.log[0].from, 9900);
-    assert.equal(meta.log[0].to, 9400);
+    assert.equal(meta.log[0].from, 930);
+    assert.equal(meta.log[0].to, 980);
+    const util = (await (await editListing(s, id, { utilities: 200 })).json()).listing;
+    assert.equal(util.warmRent, 1000);
+    const explicit = (await (await editListing(s, id, { coldRent: 700, warmRent: 950 })).json()).listing;
+    assert.equal(explicit.warmRent, 950);
+    const same = (await (await editListing(s, id, { notes: "x" })).json()).listing;
+    assert.equal(same.priceHistory.length, 4);
     const saved = JSON.parse(fs.readFileSync(path.join(s.dir, "listings.json"), "utf8"));
-    assert.equal(saved[id].price, 9400);
+    assert.equal(saved[id].warmRent, 950);
   } finally { await s.close(); }
 });
 
-test("editing the title updates displayTitle and, for manual cars, the model", async () => {
+test("editing a buy listing's price logs it; switching mode needs the other mode's amount", async () => {
   const s = await start({ fetchImpl: failFetch });
   try {
     const { id } = await addManual(s);
-    const { listing: car } = await (await editListing(s, id, { title: "Skoda Octavia Combi", regYear: 2017, regMonth: 5, hp: null, negotiable: true })).json();
-    assert.equal(car.title, "Skoda Octavia Combi");
-    assert.equal(car.displayTitle, "Skoda Octavia Combi · 2017");
-    assert.equal(car.model, "Skoda Octavia Combi");
-    assert.equal(car.regMonth, 5);
-    assert.equal(car.hp, null);
-    assert.equal(car.negotiable, true);
-    await fetch(s.base + "/api/listings/routine-car", { method: "PUT", headers: s.sync, body: JSON.stringify({ title: "Routine car", displayTitle: "Routine · special", model: "Golf", regYear: 2018, price: 9000 }) });
-    const kept = (await (await editListing(s, "routine-car", { km: 120000 })).json()).listing;
-    assert.equal(kept.displayTitle, "Routine · special");
-    const renamed = (await (await editListing(s, "routine-car", { title: "Renamed" })).json()).listing;
-    assert.equal(renamed.displayTitle, "Renamed · 2018");
-    assert.equal(renamed.model, "Golf");
+    assert.equal((await editListing(s, id, { mode: "buy" })).status, 400);
+    const l = (await (await editListing(s, id, { mode: "buy", price: 250000 })).json()).listing;
+    assert.equal(l.mode, "buy");
+    assert.deepEqual(l.priceHistory.map(p => p.price), [930, 250000]);
+    const meta = await (await fetch(s.base + "/api/meta", { headers: s.auth })).json();
+    assert.deepEqual([meta.log[0].from, meta.log[0].to], [930, 250000]);
   } finally { await s.close(); }
 });
 
-test("editing the town re-geocodes and recomputes the drive", async () => {
+test("editing title, facts, contact and clearing optional fields", async () => {
+  const s = await start({ fetchImpl: failFetch });
+  try {
+    const { id } = await addManual(s);
+    const { listing: l } = await (await editListing(s, id, { title: "Renamed flat", rooms: 2.5, floor: 2, contactName: "Mr Example", contactType: "private", notes: "call" })).json();
+    assert.equal(l.title, "Renamed flat");
+    assert.equal(l.rooms, 2.5);
+    assert.equal(l.floor, 2);
+    assert.deepEqual(l.contact, { name: "Mr Example", type: "private" });
+    const cleared = (await (await editListing(s, id, { floor: null, contactName: null })).json()).listing;
+    assert.equal(cleared.floor, undefined);
+    assert.deepEqual(cleared.contact, { type: "private" });
+  } finally { await s.close(); }
+});
+
+test("editing the address re-geocodes and recomputes the commute", async () => {
   let impl = geoFetch;
   const s = await start({ fetchImpl: (...a) => impl(...a) });
   try {
     await fetch(s.base + "/api/profile", { method: "PUT", headers: json(s.auth), body: JSON.stringify(homeProfile()) });
     const { id, listing: before } = await addManual(s);
     assert.equal(before.commute[0].minutes, 32);
-    await fetch(s.base + "/api/listings/" + id, { method: "PUT", headers: s.sync, body: JSON.stringify({ transitMin: 50, transitCheckedAt: "2026-10-18" }) });
+    await fetch(s.base + "/api/listings/" + id, { method: "PUT", headers: s.sync, body: JSON.stringify({ commuteStale: true }) });
     impl = otherTownFetch;
-    const { listing: car } = await (await editListing(s, id, { town: "50667 Köln" })).json();
-    assert.equal(car.location, "50667 Köln");
-    assert.equal(car.city, "50667 Köln");
-    assert.equal(car.lat, 50.9384);
-    assert.equal(car.lon, 6.9599);
-    assert.equal(car.commute[0].minutes, 45);
-    assert.match(car.mapsUrl, /destination=50\.9384,6\.9599$/);
-    assert.equal(car.transitMin, undefined);
-    assert.equal(car.transitCheckedAt, undefined);
+    const { listing: l } = await (await editListing(s, id, { postcode: "50667", city: "Köln" })).json();
+    assert.equal(l.city, "Köln");
+    assert.equal(l.postcode, "50667");
+    assert.equal(l.lat, 50.9384);
+    assert.equal(l.lon, 6.9599);
+    assert.equal(l.commute[0].minutes, 45);
+    assert.equal(l.commuteStale, undefined);
+    assert.match(l.mapsUrl, /destination=50\.9384,6\.9599$/);
   } finally { await s.close(); }
 });
 
-test("editing the town when geocoding fails keeps the town and clears the old distance", async () => {
+test("editing the address when geocoding fails keeps the address and clears the old location", async () => {
   let impl = geoFetch;
   const s = await start({ fetchImpl: (...a) => impl(...a) });
   try {
     await fetch(s.base + "/api/profile", { method: "PUT", headers: json(s.auth), body: JSON.stringify(homeProfile()) });
     const { id } = await addManual(s);
     impl = failFetch;
-    const r = await editListing(s, id, { town: "Nowhere" });
+    const r = await editListing(s, id, { address: "Nowhere 1" });
     assert.equal(r.status, 200);
-    const { listing: car } = await r.json();
-    assert.equal(car.location, "Nowhere");
-    assert.equal(car.city, "Nowhere");
-    for (const k of ["lat", "lon", "commute", "mapsUrl", "transitMin", "transitCheckedAt"]) assert.equal(car[k], undefined, k);
+    const { listing: l } = await r.json();
+    assert.equal(l.address, "Nowhere 1");
+    for (const k of ["lat", "lon", "commute", "mapsUrl"]) assert.equal(l[k], undefined, k);
   } finally { await s.close(); }
 });
 
-test("listing edits reject unknown fields, invalid values, unknown cars and missing passwords", async () => {
+test("listing edits reject unknown fields, invalid values, unknown listings and missing passwords", async () => {
   const s = await start({ fetchImpl: failFetch });
   try {
     const { id } = await addManual(s);
     const unknown = await editListing(s, id, { status: "accepted" });
     assert.equal(unknown.status, 400);
-    assert.deepEqual(await unknown.json(), { error: "unsupported field" });
-    const bad = await editListing(s, id, { price: "cheap", url: "http://insecure.example/x", regMonth: 13, negotiable: "yes", fuel: "steam" });
+    assert.equal((await unknown.json()).error, "invalid listing");
+    const bad = await editListing(s, id, { coldRent: "cheap", url: "http://insecure.example/x", floor: 1.5, lift: "yes", outdoor: "roof" });
     assert.equal(bad.status, 400);
     const j = await bad.json();
     assert.equal(j.error, "invalid listing");
     assert.equal(j.details.length, 5);
-    assert.equal((await editListing(s, "no-such-car", { price: 1000 })).status, 404);
-    assert.equal((await editListing(s, id, { price: 1000 }, { "Content-Type": "application/json" })).status, 401);
-    const cars = (await (await fetch(s.base + "/api/listings", { headers: s.auth })).json()).listings;
-    assert.equal(cars[id].price, 9900);
+    assert.equal((await editListing(s, "no-such-flat", { coldRent: 1000 })).status, 404);
+    assert.equal((await editListing(s, id, { coldRent: 1000 }, { "Content-Type": "application/json" })).status, 401);
+    const all = (await (await fetch(s.base + "/api/listings", { headers: s.auth })).json()).listings;
+    assert.equal(all[id].coldRent, 750);
   } finally { await s.close(); }
 });
 
-test("a failed listing save answers 500 and restores the car", async () => {
+test("a failed listing save answers 500 and restores the listing", async () => {
   const s = await start({ fetchImpl: failFetch });
   try {
     const { id } = await addManual(s);
     breakSaves(s);
-    const r = await editListing(s, id, { price: 8000, title: "Changed" });
+    const r = await editListing(s, id, { coldRent: 900, title: "Changed" });
     assert.equal(r.status, 500);
     assert.deepEqual(await r.json(), { error: "save failed" });
-    const cars = (await (await fetch(s.base + "/api/listings", { headers: s.auth })).json()).listings;
-    assert.equal(cars[id].price, 9900);
-    assert.equal(cars[id].title, newCar.title);
-    assert.equal(cars[id].priceHistory.length, 1);
+    const all = (await (await fetch(s.base + "/api/listings", { headers: s.auth })).json()).listings;
+    assert.equal(all[id].coldRent, 750);
+    assert.equal(all[id].warmRent, 930);
+    assert.equal(all[id].title, newFlat.title);
+    assert.equal(all[id].priceHistory.length, 1);
     const meta = await (await fetch(s.base + "/api/meta", { headers: s.auth })).json();
     assert.equal(meta.log.filter(e => e.type === "price").length, 0);
   } finally { await s.close(); }
@@ -410,7 +441,7 @@ test("DELETE removes the car, its log entries and its photos", async () => {
   try {
     await fetch(s.base + "/api/listings/golf", { method: "PUT", headers: s.sync, body: JSON.stringify({ title: "Golf", price: 9000 }) });
     await fetch(s.base + "/api/listings/golf-2", { method: "PUT", headers: s.sync, body: JSON.stringify({ title: "Golf 2", price: 9500 }) });
-    await editListing(s, "golf", { price: 8800 });
+    await editListing(s, "golf", { price: 8800, mode: "buy" });
     const img = path.join(s.dir, "img");
     for (const f of ["golf-1.jpg", "golf-2.jpg", "golf-2-1.jpg", "polo-1.jpg"]) fs.writeFileSync(path.join(img, f), "x");
     assert.equal((await fetch(s.base + "/api/listings/golf", { method: "DELETE", headers: { "Content-Type": "application/json" } })).status, 401);

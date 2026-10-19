@@ -10,7 +10,7 @@
     },
     "reason": {
       "en": "Honest landlords take the deposit after the contract is signed, never before you have seen the flat.",
-      "de": "Seriöse Vermieter verlangen die Kaution erst nach Vertragsschluss, nie bevor Sie die Wohnung gesehen haben.",
+      "de": "Seriöse Vermieter verlangen die Kaution erst nach Vertragsschluss, nie bevor du die Wohnung gesehen haben.",
       "pt": "Senhorios honestos só pedem a caução depois de assinado o contrato, nunca antes de ver o apartamento."
     }
   },
@@ -40,7 +40,7 @@
     },
     "reason": {
       "en": "The price per m² is below 60 % of the median of your tracked listings in the same city. Bait offers are often too cheap to be true.",
-      "de": "Der Preis pro m² liegt unter 60 % des Medians Ihrer erfassten Angebote in derselben Stadt. Lockangebote sind oft zu billig, um wahr zu sein.",
+      "de": "Der Preis pro m² liegt unter 60 % des Medians deiner erfassten Angebote in derselben Stadt. Lockangebote sind oft zu billig, um wahr zu sein.",
       "pt": "O preço por m² está abaixo de 60 % da mediana dos anúncios guardados na mesma cidade. Ofertas-isco costumam ser baratas demais para ser verdade."
     }
   },
@@ -70,7 +70,7 @@
     },
     "reason": {
       "en": "An ID copy sent to a stranger can be used for identity theft. Share it only after a viewing, ideally watermarked.",
-      "de": "Eine Ausweiskopie an Unbekannte kann für Identitätsdiebstahl genutzt werden. Geben Sie sie erst nach einer Besichtigung heraus, am besten mit Wasserzeichen.",
+      "de": "Eine Ausweiskopie an Unbekannte kann für Identitätsdiebstahl genutzt werden. Gib sie erst nach einer Besichtigung heraus, am besten mit Wasserzeichen.",
       "pt": "Uma cópia do documento enviada a um desconhecido pode servir para roubo de identidade. Partilhe-a só depois de uma visita, de preferência com marca de água."
     }
   },

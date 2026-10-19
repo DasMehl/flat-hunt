@@ -1,8 +1,8 @@
 # Flat Hunt
 
-A private tracker for finding a flat to rent or buy, run by each person on their own server. You describe your household and income, what you want and where you need to get to every day. The site ranks listings by your priorities, checks commute times, analyses each area with sourced facts, keeps your conversations with landlords, and stores your application documents encrypted — sharing them only after you approve, through an expiring, watermarked link.
+A private tracker for finding a flat to rent or buy, run by each person on their own server. You describe your household and income, what you want and where you need to get to every day. The site ranks listings by your priorities, checks commute times and keeps your conversations with landlords. Planned for later phases: area analysis with sourced facts, and encrypted storage for your application documents, shared only after you approve, through an expiring, watermarked link.
 
-An optional Claude Code routine finds new listings and sends replies from templates you approve.
+A Claude Code routine that finds new listings and sends replies from templates you approve is planned (phase 4).
 
 ## Status
 
@@ -15,7 +15,7 @@ Phase 1 (core tracker) is built. Phases 2 to 4 are planned. The full design is i
 - **Commute:** car minutes via OSRM, bike minutes via the FOSSGIS bike router, public transport via Transitous, planned for the next weekday at each place's time.
 - **Criteria check:** every listing is checked against the profile. Failing listings stay in the list, labelled with the reasons, and sort below the rest. Unknown commute times pass but are marked.
 - **Red flags:** a built-in catalogue (deposit before a viewing, payment by gift card, ID copy before any contact, and similar). You can switch entries off and add your own patterns.
-- **Scores:** a weighted score per listing. Listings without a manual rating get an estimate from the data, shown with "≈".
+- **Scores:** a weighted score per listing. Listings get an estimated score from their data, shown with "≈"; the routine (phase 4) adds full ratings.
 - **Affordability:** rent divided by net income, or the loan payment for a purchase, compared with the share of income you set aside for housing.
 - **Purchase costs:** land-transfer tax by German state, plus 2 % for notary and land registry, plus the agent fee you enter. The rates were checked in June 2026; check again before buying.
 - **Costs panel:** monthly and one-off costs per listing, including an editable maintenance reserve for purchases.
@@ -42,6 +42,8 @@ ALLOW_OPEN=1 DATA_DIR=./data SYNC_KEY=dev npm start
 ```
 
 Then open http://localhost:3000. With `ALLOW_OPEN=1`, anyone who can reach the server can see and edit the hunt.
+
+Set `SEED=1` on the first start, with no `listings.json` yet, to load example listings from a `seed.json` next to `server.js`. No seed file ships with the repository; without one the hunt starts empty.
 
 To run the tests:
 

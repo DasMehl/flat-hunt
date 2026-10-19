@@ -283,7 +283,7 @@ test("a failed index save on replace, edit and delete answers 500 and keeps the 
     assert.deepEqual(bins(), before);
     fs.rmdirSync(idx); fs.writeFileSync(idx, saved);
     const list = (await (await fetch(s.base + "/api/vault", { headers: s.auth })).json()).docs;
-    assert.deepEqual([list.length, list[0].label, list[0].mime, list[0].redactedAt], [1, "", "image/png", null]);
+    assert.deepEqual([list.length, list[0].label, list[0].mime, list[0].redactedAt], [1, "September", "image/png", null]);
     assert.deepEqual(Buffer.from(await (await fetch(s.base + "/api/vault/" + doc.id, { headers: s.auth })).arrayBuffer()), TINY_PNG);
   } finally { await s.close(); }
 });

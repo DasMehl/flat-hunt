@@ -60,3 +60,50 @@ test("featureInfoUrl refuses coordinates outside Germany before building a URL",
   assert.throws(() => N.featureInfoUrl("https://x.example", "L", 0, 0, "text/xml"), /bad coordinates/);
   assert.throws(() => N.featureInfoUrl("https://x.example", "L", "abc", 6, "text/xml"), /bad coordinates/);
 });
+
+test("parseNrw: only a recognised FeatureInfo answer can mean 'nothing mapped'", () => {
+  assert.throws(() => N.parseNrw("<html><body>Bad gateway</body></html>"), /unrecognised answer/);
+  assert.throws(() => N.parseNrw('<ServiceExceptionReport><ServiceException>x</ServiceException></ServiceExceptionReport>'), /unrecognised answer/);
+  assert.throws(() => N.parseNrw(""), /unrecognised answer/);
+  assert.equal(N.parseNrw('<FIELDS Classify.PixelValue="75111000"/>'), 75);
+  assert.equal(N.parseNrw('<FIELDS Classify.PixelValue="40000000"/>'), null);
+});
+
+test("parseBerlin: empty features is null, unreadable features throw, forms and maxima are read", () => {
+  assert.throws(() => N.parseBerlin({ features: [{ properties: { id: 7 } }] }), /unrecognised answer/);
+  assert.throws(() => N.parseBerlin({ features: [{ properties: { x: "hello" } }] }), /unrecognised answer/);
+  assert.throws(() => N.parseBerlin({}), /unrecognised answer/);
+  assert.throws(() => N.parseBerlin(null), /unrecognised answer/);
+  for (const [v, want] of [["75", 75], ["> 75", 75], ["75 dB(A)", 75], ["55 - 59", 55], ["55–59", 55], ["55 bis 59", 55], ["ab 75 dB(A)", 75]])
+    assert.equal(N.parseBerlin({ features: [{ properties: { L: v } }] }), want, v);
+  assert.equal(N.parseBerlin({ features: [{ properties: { a: "55 - 59", b: "65 - 69" } }, { properties: { a: "60 - 64" } }] }), 65);
+  assert.equal(N.parseBerlin({ features: [{ properties: { a: "30 - 34 dB(A)", b: "60 - 64" } }] }), 60);
+});
+
+test("noise bands: 75+ and lower classes", () => {
+  assert.equal(N.band(75), "75+");
+  assert.equal(N.band(80), "75+");
+  assert.equal(N.band(55), "55–59");
+  assert.equal(N.band(null), null);
+});
+
+test("noiseAt retries a 503 once, and an unrecognised answer fails the figure without retry", async () => {
+  let n = 0;
+  const f = async () => { n++; return n === 1 ? { ok: false, status: 503, headers: { get: () => null } } : reply('<FIELDS Classify.PixelValue="NoData"/>'); };
+  const r = await N.noiseAt(KOE, "05111", f, { delays: [1], sleep: async () => {} });
+  assert.equal(r.max, null);
+  assert.equal(n, 6);
+  let m = 0;
+  await assert.rejects(N.noiseAt(KOE, "05111", async () => { m++; return reply("<html>oops</html>"); }, { delays: [1], sleep: async () => {} }), /unrecognised answer/);
+  assert.equal(m, 1);
+  await assert.rejects(N.noiseAt(MITTE, "11000", async () => reply("<html>oops</html>"), noWait));
+});
+
+test("noiseAt: on a tie the first layer in order is dominant; adapters are frozen", async () => {
+  const r = await N.noiseAt(KOE, "05111", async () => reply('<FIELDS Classify.PixelValue="65000000"/>'), noWait);
+  assert.equal(r.max, 65);
+  assert.equal(r.dominant, "road");
+  assert.ok(Object.isFrozen(N.ADAPTERS));
+  const hi = await N.noiseAt(KOE, "05111", async () => reply('<FIELDS Classify.PixelValue="78000000"/>'), noWait);
+  assert.equal(hi.band, "75+");
+});

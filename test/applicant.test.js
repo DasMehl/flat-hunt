@@ -42,3 +42,22 @@ test("field rules", () => {
   const ok = valid(); ok.email = ""; ok.phone = ""; ok.job.since = null; ok.about = "x".repeat(1000);
   assert.deepEqual(validateApplicant(ok).errors, []);
 });
+
+test("blank names, control characters and phone digits", () => {
+  bad(a => { a.name = "   "; }, "name: must not be blank");
+  bad(a => { a.name = " " + "x".repeat(121) + " "; }, "name");
+  const padded = valid(); padded.name = "  " + "x".repeat(120) + "  ";
+  assert.deepEqual(validateApplicant(padded).errors, []);
+  assert.equal(validateApplicant(padded).value.name, "x".repeat(120));
+  bad(a => { a.name = "Alex\u0000"; }, "name: control characters");
+  bad(a => { a.email = "a@example.com\n"; }, "email");
+  bad(a => { a.household.pets = "cat\t"; }, "household.pets: control characters");
+  bad(a => { a.job.title = "En\u001fgineer"; }, "job.title: control characters");
+  bad(a => { a.job.employer = "Ex\u007f"; }, "job.employer: control characters");
+  bad(a => { a.about = "tab\there"; }, "about: control characters");
+  bad(a => { a.about = "line\r\nbreak"; }, "about: control characters");
+  const nl = valid(); nl.about = "line one\nline two";
+  assert.deepEqual(validateApplicant(nl).errors, []);
+  bad(a => { a.phone = "+(-) / 12"; }, "phone");
+  bad(a => { a.phone = "1234"; }, "phone");
+});

@@ -280,3 +280,94 @@ test("without a vault every share link is 404", async () => {
   try { assert.equal((await get(s, url)).status, 404); }
   finally { await s.close(); }
 });
+
+// ---------- Task 6 review fixes ----------
+const NF = [404, "text/plain; charset=utf-8", "Not found", "no-store"];
+const answer = async r => [r.status, r.headers.get("content-type"), await r.text(), r.headers.get("cache-control")];
+
+test("malformed percent-encoding under /s gets the uniform 404, no stack", async () => {
+  const s = await setup();
+  try {
+    const { body } = await s.share();
+    for (const p of ["/s/%E0%A4%A", body.url + "/%ZZ", "/s/%"]) assert.deepEqual(await answer(await get(s, p)), NF, p);
+  } finally { await s.close(); }
+});
+
+test("a forced generic error shows no stack, JSON for the API and plain text elsewhere", async () => {
+  const s = await setup();
+  try {
+    s.app.locals.state.listings = { toJSON() { throw new Error("boom /secret/path"); } };
+    const r = await fetch(s.base + "/api/listings", { headers: s.auth });
+    const t = await r.text();
+    assert.equal(r.status, 500);
+    assert.deepEqual(JSON.parse(t), { error: "server error" });
+    const bad = await fetch(s.base + "/%E0%A4%A", { headers: s.auth });
+    const bt = await bad.text();
+    assert.ok(!/URIError|\bat \S+ \(|\/Users\//.test(bt), bt);
+  } finally { await s.close(); }
+});
+
+test("HEAD on a document sends headers only and logs no open", async () => {
+  const s = await setup();
+  try {
+    const { body } = await s.share();
+    const r = await fetch(s.base + body.url + "/" + s.payslip, { method: "HEAD" });
+    assert.equal(r.status, 200);
+    assert.equal(r.headers.get("content-type"), "application/pdf");
+    assert.equal((await fetch(s.base + body.url + "/" + s.payslip + "x", { method: "HEAD" })).status, 404);
+    const share = (await (await fetch(s.base + "/api/listings/flat/shares", { headers: s.auth })).json()).shares[0];
+    assert.deepEqual(share.opens, []);
+  } finally { await s.close(); }
+});
+
+test("a POST with broken JSON to /s gets the uniform 404", async () => {
+  const s = await setup();
+  try {
+    const { body } = await s.share();
+    for (const p of [body.url, "/s/" + "A".repeat(43)]) {
+      const r = await fetch(s.base + p, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{nope" });
+      assert.deepEqual(await answer(r), NF, p);
+    }
+  } finally { await s.close(); }
+});
+
+test("a share whose listing is gone, and a document not in the share, are 404; the HTML page has a CSP", async () => {
+  const s = await setup();
+  try {
+    const { body } = await s.share();
+    const only = (await s.share({ docIds: [s.payslip] })).body;
+    assert.deepEqual(await answer(await get(s, only.url + "/summary")), NF);
+    const page = await get(s, body.url);
+    assert.equal(page.headers.get("content-security-policy"), "default-src 'none'; style-src 'unsafe-inline'");
+    delete s.app.locals.state.listings.flat;
+    assert.deepEqual(await answer(await get(s, body.url)), NF);
+    assert.deepEqual(await answer(await get(s, body.url + "/" + s.payslip)), NF);
+  } finally { await s.close(); }
+});
+
+test("an unreadable stored document answers 500 Document unavailable", async () => {
+  const s = await setup();
+  try {
+    const { body } = await s.share();
+    const walk = d => fs.readdirSync(d, { withFileTypes: true }).flatMap(e => e.isDirectory() ? walk(path.join(d, e.name)) : [path.join(d, e.name)]);
+    for (const f of walk(s.dir)) if (f.endsWith(".bin") && !f.endsWith("keycheck.bin")) fs.writeFileSync(f, Buffer.from("garbage"));
+    const r = await get(s, body.url + "/" + s.payslip);
+    assert.equal(r.status, 500);
+    assert.equal(await r.text(), "Document unavailable");
+  } finally { await s.close(); }
+});
+
+test("trustProxy decides whether X-Forwarded-For separates visitors in the rate limit", async () => {
+  const hit = (s, ip) => fetch(s.base + "/s/" + "C".repeat(43), { headers: { "X-Forwarded-For": ip } });
+  const on = await setup({ trustProxy: true });
+  try {
+    for (let i = 0; i < 30; i++) assert.equal((await hit(on, "9.9.9.9")).status, 404);
+    assert.equal((await hit(on, "9.9.9.9")).status, 429);
+    assert.equal((await hit(on, "8.8.8.8")).status, 404);
+  } finally { await on.close(); }
+  const off = await setup({ trustProxy: false });
+  try {
+    for (let i = 0; i < 30; i++) await hit(off, "9." + i + ".9.9");
+    assert.equal((await hit(off, "8.8.8.8")).status, 429);
+  } finally { await off.close(); }
+});

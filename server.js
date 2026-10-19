@@ -67,6 +67,9 @@ function createApp(options = {}) {
   app.disable("x-powered-by");
   // Behind one reverse proxy (Railway), req.ip is the visitor's address; needed for the share-link rate limit.
   if (options.trustProxy ?? process.env.TRUST_PROXY === "1") app.set("trust proxy", 1);
+  // Before body parsing, so a body sent to /s can never produce a different answer than the uniform 404.
+  // Share links are public; everything registered after the password check is not.
+  app.use("/s", publicShares({ state, vault, persistShares, now, rateLimit: options.shareRateLimit }));
   app.use(express.json({ limit: "4mb" }));
   app.use((req, res, next) => {
     res.set("X-Content-Type-Options", "nosniff"); res.set("X-Frame-Options", "DENY"); res.set("Referrer-Policy", "strict-origin-when-cross-origin");
@@ -75,9 +78,6 @@ function createApp(options = {}) {
   });
 
   app.get("/healthz", (req, res) => res.type("text").send("ok"));
-
-  // Share links are public; everything registered after the password check is not.
-  app.use("/s", publicShares({ state, vault, persistShares, now, rateLimit: options.shareRateLimit }));
 
   if (password) {
     app.use((req, res, next) => {
@@ -416,6 +416,13 @@ function createApp(options = {}) {
     if (err && err.type === "entity.too.large") return res.status(413).json({ error: "file too large" });
     if (err && err.type === "entity.parse.failed") return res.status(400).json({ error: "invalid json" });
     next(err);
+  });
+  // Last resort: never reveal a stack or a path.
+  app.use((err, req, res, next) => {
+    if (res.headersSent) return next(err);
+    const status = err && err.status >= 400 && err.status < 500 ? err.status : 500;
+    if (req.path.startsWith("/api/")) return res.status(status).json({ error: status === 500 ? "server error" : "bad request" });
+    res.status(status).type("text/plain").send(status === 500 ? "Server error" : "Bad request");
   });
   return app;
 }

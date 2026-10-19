@@ -10,7 +10,7 @@ async function start(options = {}) {
   const base = `http://127.0.0.1:${server.address().port}`;
   const auth = { Authorization: "Basic " + Buffer.from("u:pw").toString("base64") };
   const sync = { ...auth, "x-sync-key": "key", "Content-Type": "application/json" };
-  return { base, auth, sync, dir, close: () => new Promise(r => server.close(r)) };
+  return { app, base, auth, sync, dir, close: () => new Promise(r => server.close(r)) };
 }
 
 // Test-only vault keys (bytes 0..31 and 31..0), never used outside tests.

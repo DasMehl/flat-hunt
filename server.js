@@ -12,10 +12,18 @@ const { validateListingInput, requiredErrors } = require("./lib/listing");
 const { warmRent } = require("./public/money");
 const { parseVaultKey, vaultStatus, openVault } = require("./lib/vault");
 const { vaultApi } = require("./lib/vault-api");
+const { computeArea } = require("./lib/area");
+const { createAreaQueue, needsArea } = require("./lib/area-job");
+const { areaApi } = require("./lib/area-api");
+const { createAreaCache } = require("./lib/area-cache");
+const { createSpacer } = require("./lib/area-http");
+const { loadCrimeTable } = require("./lib/crime");
+const { loadRentGrid } = require("./lib/rent-grid");
+const { OVERPASS_URL } = require("./lib/amenities");
 
 const STATUSES = ["new", "contacted", "viewing-invited", "viewing-done", "applied", "docs-requested", "accepted", "rejected", "dropped", "gone"];
 // Fields the routine may write with the sync key (PUT /api/listings/:id). Owner fields stay page-only.
-const LISTING_FIELDS = ["title", "url", "source", "mode", "coldRent", "utilities", "warmRent", "deposit", "takeover", "price", "rooms", "size", "floor", "lift", "outdoor", "kitchen", "petsAllowed", "availableFrom", "wbsRequired", "address", "postcode", "city", "district", "description", "lat", "lon", "mapsUrl", "commute", "commuteStale", "area", "contact", "photos", "rating", "redFlags", "verdict", "pros", "cons", "questions", "i18n", "addedAt", "lastSeenAt", "priceHistory", "gone"];
+const LISTING_FIELDS = ["title", "url", "source", "mode", "coldRent", "utilities", "warmRent", "deposit", "takeover", "price", "rooms", "size", "floor", "lift", "outdoor", "kitchen", "petsAllowed", "availableFrom", "wbsRequired", "address", "postcode", "city", "district", "description", "lat", "lon", "mapsUrl", "commute", "commuteStale", "contact", "photos", "rating", "redFlags", "verdict", "pros", "cons", "questions", "i18n", "addedAt", "lastSeenAt", "priceHistory", "gone"];
 const LINK_FIELDS = ["url", "mapsUrl"];
 const isHttpUrl = v => typeof v === "string" && /^https?:\/\//i.test(v);
 const today = () => new Date().toISOString().slice(0, 10);
@@ -55,6 +63,25 @@ function createApp(options = {}) {
   let writing = Promise.resolve();
   const persist = () => (writing = writing.catch(() => {}).then(() => Promise.all([writeJsonAtomic(files.listings, state.listings), writeJsonAtomic(files.meta, state.meta)])));
 
+  // Area facts: computed in the background (lib/area-job.js), one listing at a time, at most one Overpass query at a time.
+  const areaAuto = options.areaAuto ?? true;
+  const ao = options.area || {};
+  let crimeTable, rentGrid;
+  const areaDeps = {
+    now, delays: ao.delays, overpassDelays: ao.overpassDelays, sleep: ao.sleep,
+    overpassUrl: ao.overpassUrl || process.env.OVERPASS_URL || OVERPASS_URL,
+    overpass: createSpacer(ao.overpassSpacingMs ?? 10000, ao.sleep ? { sleep: ao.sleep } : {}),
+    cache: createAreaCache(path.join(dataDir, "area-cache.json"), { now })
+  };
+  const areaQueue = createAreaQueue({
+    state, persist: () => persist(),
+    compute: (point, { force }) => {
+      if (crimeTable === undefined) crimeTable = ao.crimeTable !== undefined ? ao.crimeTable : loadCrimeTable();
+      if (rentGrid === undefined) rentGrid = ao.rentGrid !== undefined ? ao.rentGrid : loadRentGrid();
+      return computeArea(point, { ...areaDeps, fetchImpl: app.locals.fetchImpl, crimeTable, rentGrid, force });
+    }
+  });
+
   let writingShares = Promise.resolve();
   const persistShares = () => (writingShares = writingShares.catch(() => {}).then(() => writeJsonAtomic(files.shares, { shares: state.shares })));
 
@@ -64,6 +91,7 @@ function createApp(options = {}) {
   app.locals.persist = persist;
   app.locals.fetchImpl = options.fetchImpl || globalThis.fetch;
   app.locals.vault = vault;
+  app.locals.areaQueue = areaQueue;
   app.disable("x-powered-by");
   // Behind one reverse proxy (Railway), req.ip is the visitor's address; needed for the share-link rate limit.
   if (options.trustProxy ?? process.env.TRUST_PROXY === "1") app.set("trust proxy", 1);
@@ -99,6 +127,7 @@ function createApp(options = {}) {
   };
   app.locals.requireKey = requireKey;
   app.use(vaultApi({ state, vault, vaultStatus: vault ? "ready" : vStatus === "empty" ? "off" : vStatus, persist, persistShares, now }));
+  app.use(areaApi({ state, queue: areaQueue }));
 
   app.get("/api/listings", (req, res) => res.json({ listings: state.listings, updatedAt: new Date().toISOString() }));
 
@@ -233,6 +262,7 @@ function createApp(options = {}) {
       if (at >= 0) state.meta.log.splice(at, 1);
       return res.status(500).json({ error: "save failed" });
     }
+    if (areaAuto && typeof listing.lat === "number") areaQueue.enqueue(id);
     res.status(201).json({ ok: true, id, listing });
   });
 
@@ -267,7 +297,7 @@ function createApp(options = {}) {
   });
 
   // Fields that describe where the listing is; a new address makes all of them stale.
-  const PLACE_FIELDS = ["lat", "lon", "commute", "commuteStale", "mapsUrl"];
+  const PLACE_FIELDS = ["lat", "lon", "commute", "commuteStale", "mapsUrl", "area"];
   const ADDRESS_FIELDS = ["address", "postcode", "city"];
 
   app.patch("/api/listings/:id/listing", async (req, res) => {
@@ -311,6 +341,7 @@ function createApp(options = {}) {
       if (at >= 0) state.meta.log.splice(at, 1);
       return res.status(500).json({ error: "save failed" });
     }
+    if (place && areaAuto && typeof c.lat === "number") areaQueue.enqueue(id);
     res.json({ ok: true, listing: c });
   });
 
@@ -339,6 +370,7 @@ function createApp(options = {}) {
     }
     try { await persist(); }
     catch (e) { restoreListing(); return res.status(500).json({ error: "save failed" }); }
+    areaQueue.drop(id);
     // Photos are named <id>-N; skip files of another listing whose id itself starts with "<id>-".
     const img = path.join(dataDir, "img"), others = Object.keys(state.listings).filter(o => o.startsWith(id + "-"));
     try {
@@ -355,7 +387,10 @@ function createApp(options = {}) {
     if (!/^[a-z0-9][a-z0-9-]{0,79}$/.test(id)) return res.status(400).json({ error: "invalid id" });
     const listing = Object.fromEntries(Object.entries(incoming).filter(([k, v]) => LISTING_FIELDS.includes(k) && (!LINK_FIELDS.includes(k) || isHttpUrl(v))));
     const prev = state.listings[id], snap = prev ? structuredClone(prev) : null;
+    // New coordinates make the area facts stale; the server recomputes them (the routine cannot write `area`).
+    const moved = !!prev && ["lat", "lon"].some(k => k in listing && listing[k] !== prev[k]);
     state.listings[id] = prev ? { ...prev, ...listing } : { status: "new", pick: false, notes: "", nextStep: "", messages: [], addedAt: today(), ...listing };
+    if (moved) delete state.listings[id].area;
     if (!prev && typeof incoming.pick === "boolean") state.listings[id].pick = incoming.pick;
     const entry = prev ? null : { date: today(), type: "new", id, text: state.listings[id].title, price: headline(state.listings[id]) };
     if (entry) state.meta.log.unshift(entry);
@@ -366,6 +401,7 @@ function createApp(options = {}) {
       if (at >= 0) state.meta.log.splice(at, 1);
       return res.status(500).json({ error: "save failed" });
     }
+    if (areaAuto && (moved || !prev) && needsArea(written)) areaQueue.enqueue(id);
     res.json({ ok: true, created: !prev });
   });
 
@@ -424,6 +460,8 @@ function createApp(options = {}) {
     if (req.path.startsWith("/api/")) return res.status(status).json({ error: status === 500 ? "server error" : "bad request" });
     res.status(status).type("text/plain").send(status === 500 ? "Server error" : "Bad request");
   });
+  // Start-up backfill: listings from before phase 3, or whose coordinates changed while the server was down.
+  if (areaAuto) for (const [id, c] of Object.entries(state.listings)) if (needsArea(c)) areaQueue.enqueue(id);
   return app;
 }
 

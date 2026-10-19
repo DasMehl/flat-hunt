@@ -5,7 +5,8 @@ const { createApp } = require("../server");
 
 async function start(options = {}) {
   const dir = options.dataDir || fs.mkdtempSync(path.join(os.tmpdir(), "flat-hunt-test-"));
-  const app = createApp({ dataDir: dir, password: "pw", syncKey: "key", vaultKey: "", ...options });
+  // areaAuto off by default: tests that add listings must not start background area lookups unless they ask for them.
+  const app = createApp({ dataDir: dir, password: "pw", syncKey: "key", vaultKey: "", areaAuto: false, ...options });
   const server = await new Promise(resolve => { const s = app.listen(0, "127.0.0.1", () => resolve(s)); });
   const base = `http://127.0.0.1:${server.address().port}`;
   const auth = { Authorization: "Basic " + Buffer.from("u:pw").toString("base64") };

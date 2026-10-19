@@ -3,11 +3,12 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const { PDFDocument } = require("pdf-lib");
-const { start, TEST_VAULT_KEY, TINY_JPEG, pdfPageStreams, hasPdfText } = require("./helpers");
+const { docMeta, start, TEST_VAULT_KEY, TINY_JPEG, pdfPageStreams, hasPdfText } = require("./helpers");
 const { defaultApplicant } = require("../lib/applicant");
 const { defaultProfile } = require("../lib/profile");
 const { hashToken } = require("../lib/shares");
 
+const CSP = "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'";
 const json = (h = {}) => ({ ...h, "Content-Type": "application/json" });
 const flat = { title: "2 rooms with balcony", url: "https://example.com/flat/1", source: "manual", mode: "rent", warmRent: 900, rooms: 2, size: 60, address: "Beispielstraße 1", postcode: "40210", city: "Düsseldorf", status: "contacted" };
 
@@ -21,7 +22,7 @@ async function setup(o = {}) {
   await fetch(s.base + "/api/applicant", { method: "PUT", headers: json(s.auth), body: JSON.stringify({ ...defaultApplicant(), name: "Alex Example" }) });
   await fetch(s.base + "/api/listings/flat", { method: "PUT", headers: s.sync, body: JSON.stringify(flat) });
   const d = await PDFDocument.create(); d.addPage(); d.addPage();
-  const up = (body, type, q) => fetch(s.base + "/api/vault?" + q, { method: "POST", headers: { ...s.auth, "Content-Type": type }, body }).then(r => r.json()).then(j => j.doc.id);
+  const up = (body, type, q) => fetch(s.base + "/api/vault", { method: "POST", headers: { ...s.auth, "Content-Type": type, "X-Doc-Meta": docMeta(q) }, body }).then(r => r.json()).then(j => j.doc.id);
   s.payslip = await up(Buffer.from(await d.save()), "application/pdf", "type=payslip&date=2026-09-30");
   s.idDoc = await up(TINY_JPEG, "image/jpeg", "type=id");
   s.share = async (body = { docIds: [s.payslip, s.idDoc, "summary"] }, id = "flat") => {
@@ -142,20 +143,22 @@ test("a request on a decided listing is recorded but keeps its status", async ()
   } finally { await s.close(); }
 });
 
-test("a failed save rolls back share creation and revocation", async () => {
+test("a failed save rolls back share creation; a failed revocation stays revoked (fails closed)", async () => {
   const s = await setup();
   try {
-    const a = (await s.share()).body.share;
+    const { share: a, url } = (await s.share()).body;
     const before = fs.readFileSync(path.join(s.dir, "shares.json"), "utf8");
     fs.rmSync(path.join(s.dir, "shares.json")); fs.mkdirSync(path.join(s.dir, "shares.json"));
     const c = await s.share();
     assert.deepEqual([c.status, c.body.error], [500, "save failed"]);
     const r = await fetch(s.base + "/api/shares/" + a.id, { method: "DELETE", headers: s.auth });
     assert.equal(r.status, 500);
+    assert.equal((await get(s, url)).status, 404); // the link is dead although the save failed
     fs.rmSync(path.join(s.dir, "shares.json"), { recursive: true }); fs.writeFileSync(path.join(s.dir, "shares.json"), before);
     const list = await (await fetch(s.base + "/api/listings/flat/shares", { headers: s.auth })).json();
     assert.equal(list.shares.length, 1);
-    assert.equal(list.shares[0].revokedAt, null);
+    assert.ok(list.shares[0].revokedAt);
+    assert.equal(list.shares[0].active, false);
     assert.equal(fs.readFileSync(path.join(s.dir, "shares.json"), "utf8"), before);
   } finally { await s.close(); }
 });
@@ -266,6 +269,7 @@ test("share links are rate limited to 30 requests a minute per address", async (
     const r = await get(s, "/s/" + "B".repeat(43));
     assert.equal(r.status, 429);
     assert.equal(r.headers.get("retry-after"), "60");
+    assert.equal(r.headers.get("content-security-policy"), CSP);
     s.setClock("2026-10-20T10:01:00Z");
     assert.equal((await get(s, "/s/" + "B".repeat(43))).status, 404);
     assert.equal((await fetch(s.base + "/api/vault", { headers: s.auth })).status, 200); // the API is not limited
@@ -338,7 +342,7 @@ test("a share whose listing is gone, and a document not in the share, are 404; t
     const only = (await s.share({ docIds: [s.payslip] })).body;
     assert.deepEqual(await answer(await get(s, only.url + "/summary")), NF);
     const page = await get(s, body.url);
-    assert.equal(page.headers.get("content-security-policy"), "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'");
+    assert.equal(page.headers.get("content-security-policy"), CSP);
     delete s.app.locals.state.listings.flat;
     assert.deepEqual(await answer(await get(s, body.url)), NF);
     assert.deepEqual(await answer(await get(s, body.url + "/" + s.payslip)), NF);
@@ -385,5 +389,19 @@ test("every /s response and the API carry nosniff and X-Frame-Options DENY", asy
     const r = await get(s, "/s/" + "D".repeat(43));
     assert.equal(r.status, 429);
     ok(r);
+  } finally { await s.close(); }
+});
+
+test("every non-PDF share answer carries the CSP; PDFs are exempt", async () => {
+  const s = await setup();
+  try {
+    const { body } = await s.share();
+    for (const p of [body.url, "/s/" + "E".repeat(43), body.url + "/nope", "/s/%E0%A4%A", body.url + "/summary/extra"]) {
+      const r = await get(s, p);
+      assert.equal(r.headers.get("content-security-policy"), CSP, p);
+    }
+    const pdf = await get(s, body.url + "/" + s.payslip);
+    assert.equal(pdf.headers.get("content-type"), "application/pdf");
+    assert.equal(pdf.headers.get("content-security-policy"), null);
   } finally { await s.close(); }
 });

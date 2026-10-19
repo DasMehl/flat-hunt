@@ -25,7 +25,7 @@ Phases 1 (core tracker) and 2 (applicant profile and document vault) are built. 
 - **Applicant profile:** household, work, what you can provide on request and a few sentences about you, with a one-page applicant summary PDF in German, English or Portuguese.
 - **Document vault:** PDF, JPEG and PNG files up to 10 MB, stored encrypted with your `VAULT_KEY`. Payslips older than three months are flagged.
 - **Document requests:** log on a listing which documents the landlord asked for; the listing moves to "Documents requested".
-- **Share links, only after you approve:** you tick the documents for one landlord and get a link, valid for 7 days by default (1 to 30). You can revoke it at any time. The link is rate-limited. Every page of every document carries the watermark "Only for the application for <address> · <date>". Every view is logged with its time, but no IP address.
+- **Share links, only after you approve:** you tick the documents for one landlord and get a link, valid for 7 days by default (1 to 30). You can revoke it at any time. The link is rate-limited. Every page of every document carries the watermark "Only for the application for <address> · <date>". Every document opened is logged with its time, but no IP address.
 - **Redaction helper:** cover tax ID, social-security number or bank details before you share. It works in your browser, and the covered parts are removed from the saved copy, not just hidden. Before a payslip is shared for the first time, the page reminds you to do this.
 
 ## Run your own copy
@@ -39,7 +39,7 @@ You need Node.js 18 or newer and a Railway account (or any host that runs a Node
    - `DATA_DIR=/data` — where the JSON data files are kept. Without the volume, data is lost on redeploy.
    - `SITE_PASSWORD` — the password for the whole site. The server refuses to start without it.
    - `SYNC_KEY` — a secret for the routine's API calls and photo uploads. Without it those routes return 503. You can leave it unset if you do not use the routine.
-   - `VAULT_KEY` — the key for the applicant profile and document vault. Create it with `openssl rand -base64 32`, set it on the service, and keep a copy in your password manager. Without the same key the vault cannot be read, and once documents are stored the server will not start without it. The key is never written to the volume. Without `VAULT_KEY` the profile, documents and share links are off. The server refuses `VAULT_KEY` without `SITE_PASSWORD`.
+   - `VAULT_KEY` — the key for the applicant profile and document vault. Create it with `openssl rand -base64 32`, set it on the service, and keep a copy in your password manager. Without the same key the vault cannot be read. The key becomes mandatory as soon as the vault was first opened with it (the server writes a key check file on the first start with a key), even before any document is stored; after that the server will not start without the same key. To start over with a new key, stop the server and delete the empty `DATA_DIR/vault` folder. The key is never written to the volume. Without `VAULT_KEY` the profile, documents and share links are off. The server refuses `VAULT_KEY` without `SITE_PASSWORD`.
    - `TRUST_PROXY=1` (optional, recommended on Railway) — Railway puts one proxy in front of the server; with this set, the share-link rate limit counts visitors instead of the proxy.
 5. Deploy, then open the Railway URL and sign in with `SITE_PASSWORD`. The setup wizard asks for your profile on first use.
 
@@ -65,7 +65,7 @@ To try the document vault locally, set a password and a key:
 SITE_PASSWORD=test DATA_DIR=./data SYNC_KEY=dev VAULT_KEY=$(openssl rand -base64 32) npm start
 ```
 
-A new key on each start cannot open the vault of the previous run: keep one key per data directory.
+A new key on each start cannot open the vault of the previous run: keep one key per data directory. To start over with a new key, stop the server and delete the empty `DATA_DIR/vault` folder; if it holds documents, they are lost.
 
 Set `SEED=1` on the first start, with no `listings.json` yet, to load example listings from a `seed.json` next to `server.js`. No seed file ships with the repository; without one the hunt starts empty.
 

@@ -391,6 +391,7 @@ dialog.sx.ld-warn { max-width: 520px; }
 .vu-docmeta { font-size: 12.5px; color: var(--muted); }
 .vu-docacts .vu-btn { height: 34px; padding: 0 12px; font-size: 13px; }
 .vu-badge { font-size: 11.5px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: var(--surface-2); }
+.vu-badge.muted { color: var(--muted); cursor: help; }
 .vu-badge.good { background: var(--good-bg); color: var(--good); } .vu-badge.warn { background: var(--warn-bg); color: var(--warn); cursor: help; }
 #aboutbtn[aria-pressed="true"] { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
 [hidden] { display: none !important; }
@@ -457,6 +458,38 @@ dialog.sx.rd { margin: 0; width: 100%; max-width: none; height: 100dvh; max-heig
 @media (pointer: coarse) { .rd-mode { display: inline-flex; align-items: center; } }
 @media (max-width: 560px) { .sx.rd .sxhead .hint { font-size: 12.5px; } .sx.rd .bar button { padding: 0 12px; } }
 body.setup .wrap{display:none}
+/* Area panel (public/area-ui.js) and the sources footer */
+section.area { margin-top: 16px; min-width: 0; }
+.area-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 10px; }
+.area-head h3.sp { margin: 0; }
+.area-places th, .area-places td:nth-child(-n+2) { white-space: normal; }
+.area-places td:nth-child(2) { overflow-wrap: anywhere; }
+.area-head .btn { margin-left: auto; padding: 4px 10px; font-size: 12.5px; }
+.area-asof { font-size: 12px; }
+.area-status { margin: 6px 0 0; font-size: 13px; }
+.area-status:empty { display: none; }
+.area-blocks { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; margin-top: 10px; }
+.area-fig { background: var(--surface-2); border-radius: 8px; padding: 10px 12px; min-width: 0; }
+.area-fig h4 { margin: 0 0 5px; font-size: 13px; font-weight: 600; }
+.area-txt { margin: 0 0 4px; font-size: 13.5px; }
+.area-txt.warn { color: var(--warn); font-weight: 600; }
+.area-note { margin: 4px 0 0; font-size: 12.5px; color: var(--muted); }
+.area-list { margin: 2px 0 4px 18px; padding: 0; font-size: 13px; }
+.area-src { margin: 6px 0 0; font-size: 11.5px; color: var(--muted); overflow-wrap: anywhere; }
+.area-src a { color: inherit; }
+.area-places { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.area-places table { width: 100%; min-width: 280px; }
+.area-places th, .area-places td { padding: 6px 8px; vertical-align: top; }
+.area-lines { display: inline-flex; flex-wrap: wrap; gap: 3px; margin-left: 6px; vertical-align: middle; }
+.area-line { font-size: 11px; font-weight: 600; padding: 0 5px; border-radius: 4px; background: var(--surface-3); cursor: help; }
+.area-est { display: block; color: var(--muted); font-size: 11px; }
+.bars .bl.tipped { cursor: help; text-decoration: underline dotted; }
+footer.sources { margin-top: 18px; font-size: 12px; color: var(--muted); max-width: 90ch; }
+footer.sources h3 { font-size: 12.5px; font-weight: 600; margin: 0 0 6px; }
+footer.sources ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; overflow-wrap: anywhere; }
+footer.sources b { font-weight: 600; color: var(--fg); }
+footer.sources a { color: inherit; }
+@media (max-width: 700px) { .area-head .btn { margin-left: 0; } }
 </style>
 </head>
 <body>
@@ -502,6 +535,7 @@ body.setup .wrap{display:none}
       </div>
       <section class="compare" id="compare"><h2 id="cmptitle"></h2><div class="tablewrap"><table id="cmp"></table></div></section>
       <p class="howto" id="howto"></p>
+      <footer class="sources" id="sources"></footer>
     </div>
   </div>
 </div>
@@ -509,6 +543,8 @@ body.setup .wrap{display:none}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script src="money.js"></script>
 <script src="criteria.js"></script>
+<script src="area-sources.js"></script>
+<script src="area-ui.js"></script>
 <script src="setup.js"></script>
 <script src="vault-ui.js"></script>
 <script src="imagepdf.js"></script>
@@ -539,7 +575,7 @@ body.setup .wrap{display:none}
       chart: m => m === "buy" ? "Price vs size, coloured by score" : "Warm rent vs size, coloured by score", limitRent: "max warm rent", limitBuy: "max price", noChart: "No listings with size and price to plot yet.",
       list: "Ranked list", count: (s, t) => `${s} shown · ${t} tracked`, loading: "Loading…", noMatch: "No listing matches these filters.", loadFail: "Could not load the listings.",
       updates: "Latest changes", upNew: "new", upPrice: "price", upGone: "gone", upBack: "back", newBadge: "NEW", gone: "Listing gone",
-      outside: "Outside your criteria", estTip: "Estimated from price, size and commute; area, condition and contact are not rated yet",
+      outside: "Outside your criteria", estTip: "Estimated from price, size, commute and the area facts; condition and contact are not rated yet",
       redFlag: n => n === 1 ? "Red flag" : `${n} red flags`, warm: "warm", cold: "cold", rooms: n => `${n} ${n === 1 ? "room" : "rooms"}`,
       floor: f => f === 0 ? "ground floor" : f < 0 ? "basement" : `floor ${f}`, from: d => `from ${d}`, now: "available now",
       commuteChip: (l, m, mode) => `${l} ${m} min · ${mode}`, commuteUnknown: l => `${l} ?`, commuteUnknownTip: "Commute time unknown: the lookup failed or the address is missing.", overLimit: m => `Over your ${m} min limit`, withinLimit: m => `Within your ${m} min limit`,
@@ -563,7 +599,7 @@ body.setup .wrap{display:none}
       rentPart: "Warm rent", loanPart: "Loan payment", reservePart: "Maintenance reserve", limitLine: (a, p) => `Your limit ${a} (${p} of income)`, noIncome: "Set your net income in Settings to see your limit.", costEmpty: "Choose listings above to compare their costs.",
       costNote: "Bars show monthly housing costs. Renting: warm rent (cold rent plus utilities). Buying: loan payment at your rate and term plus the maintenance reserve; property tax and service charges are not included. One-off: deposit and takeover, or the equity you put in, which pays the purchase costs first; any part of those costs equity does not cover is financed.",
       cmp: "Selected listings side by side", cols: ["Listing", "Score", "Rent/buy", "Warm rent / price", "€/m²", "Rooms", "m²", "Floor", "Available", "Commute", "Affordability", "Status"],
-      howto: "Scores combine the ratings you weight in Settings: price, size, commute, area, condition and contact. Listings without an assessment get an estimate (≈) from price, size and commute. Filters, map and chart work together: narrow the list, then click a marker or dot to open that listing. Shortlisting does not contact anyone.",
+      howto: "Scores combine the ratings you weight in Settings: price, size, commute, area, condition and contact. Listings without an assessment get an estimate (≈) from price, size, commute and the area facts. Filters, map and chart work together: narrow the list, then click a marker or dot to open that listing. Shortlisting does not contact anyone.",
       welcomeTitle: "No listings yet", welcomeText: "Add a listing you like and Flat Hunt checks it against your criteria, commute limits and budget." },
     de: { locale: "de-DE",
       sub: (n, modes, d) => `${n} ${n === 1 ? "Inserat" : "Inserate"} · ${modes}${d ? " · letzte Inseratsprüfung " + d : ""}`,
@@ -587,7 +623,7 @@ body.setup .wrap{display:none}
       chart: m => m === "buy" ? "Kaufpreis vs. Fläche, Farbe = Punkte" : "Warmmiete vs. Fläche, Farbe = Punkte", limitRent: "max. Warmmiete", limitBuy: "max. Kaufpreis", noChart: "Noch keine Inserate mit Fläche und Preis.",
       list: "Rangliste", count: (s, t) => `${s} angezeigt · ${t} erfasst`, loading: "Lädt…", noMatch: "Kein Inserat passt zu diesen Filtern.", loadFail: "Inserate konnten nicht geladen werden.",
       updates: "Letzte Änderungen", upNew: "neu", upPrice: "Preis", upGone: "weg", upBack: "wieder da", newBadge: "NEU", gone: "Inserat weg",
-      outside: "Außerhalb deiner Kriterien", estTip: "Geschätzt aus Preis, Fläche und Weg; Umgebung, Zustand und Kontakt sind noch nicht bewertet",
+      outside: "Außerhalb deiner Kriterien", estTip: "Geschätzt aus Preis, Fläche, Wegen und den Umgebungsdaten; Zustand und Kontakt sind noch nicht bewertet",
       redFlag: n => n === 1 ? "Warnzeichen" : `${n} Warnzeichen`, warm: "warm", cold: "kalt", rooms: n => `${n} Zi.`,
       floor: f => f === 0 ? "Erdgeschoss" : f < 0 ? "Untergeschoss" : `${f}. OG`, from: d => `ab ${d}`, now: "sofort frei",
       commuteChip: (l, m, mode) => `${l} ${m} Min. · ${mode}`, commuteUnknown: l => `${l} ?`, commuteUnknownTip: "Wegzeit unbekannt: Die Abfrage ist fehlgeschlagen oder die Adresse fehlt.", overLimit: m => `Über deiner Grenze von ${m} Min.`, withinLimit: m => `Innerhalb deiner Grenze von ${m} Min.`,
@@ -611,7 +647,7 @@ body.setup .wrap{display:none}
       rentPart: "Warmmiete", loanPart: "Kreditrate", reservePart: "Instandhaltungsrücklage", limitLine: (a, p) => `Deine Grenze ${a} (${p} des Einkommens)`, noIncome: "Trage dein Nettoeinkommen in den Einstellungen ein, um deine Grenze zu sehen.", costEmpty: "Oben Inserate auswählen, um ihre Kosten zu vergleichen.",
       costNote: "Die Balken zeigen die monatlichen Wohnkosten. Miete: Warmmiete (Kaltmiete plus Nebenkosten). Kauf: Kreditrate zu deinem Zins und deiner Laufzeit plus Instandhaltungsrücklage; Grundsteuer und Hausgeld sind nicht enthalten. Einmalig: Kaution und Ablöse bzw. das eingesetzte Eigenkapital, das zuerst die Kaufnebenkosten deckt; was es davon nicht deckt, wird mitfinanziert.",
       cmp: "Ausgewählte Inserate im Vergleich", cols: ["Inserat", "Punkte", "Miete/Kauf", "Warmmiete / Preis", "€/m²", "Zimmer", "m²", "Etage", "Frei ab", "Weg", "Bezahlbarkeit", "Status"],
-      howto: "Die Punkte kombinieren die Bewertungen, die du in den Einstellungen gewichtest: Preis, Fläche, Wege, Umgebung, Zustand und Kontakt. Inserate ohne Einschätzung bekommen eine Schätzung (≈) aus Preis, Fläche und Wegen. Filter, Karte und Diagramm arbeiten zusammen: Liste eingrenzen, dann Marker oder Punkt anklicken, um das Inserat zu öffnen. Vormerken schreibt niemanden an.",
+      howto: "Die Punkte kombinieren die Bewertungen, die du in den Einstellungen gewichtest: Preis, Fläche, Wege, Umgebung, Zustand und Kontakt. Inserate ohne Einschätzung bekommen eine Schätzung (≈) aus Preis, Fläche, Wegen und den Umgebungsdaten. Filter, Karte und Diagramm arbeiten zusammen: Liste eingrenzen, dann Marker oder Punkt anklicken, um das Inserat zu öffnen. Vormerken schreibt niemanden an.",
       welcomeTitle: "Noch keine Inserate", welcomeText: "Füge ein Inserat hinzu, das dir gefällt, und Flat Hunt prüft es gegen deine Kriterien, Wegzeiten und dein Budget." },
     pt: { locale: "pt-BR",
       sub: (n, modes, d) => `${n} ${n === 1 ? "anúncio" : "anúncios"} · ${modes}${d ? " · última verificação dos anúncios " + d : ""}`,
@@ -635,7 +671,7 @@ body.setup .wrap{display:none}
       chart: m => m === "buy" ? "Preço vs. área, cor = pontuação" : "Aluguel total vs. área, cor = pontuação", limitRent: "aluguel total máx.", limitBuy: "preço máx.", noChart: "Ainda não há anúncios com área e preço.",
       list: "Ranking", count: (s, t) => `${s} exibidos · ${t} registrados`, loading: "Carregando…", noMatch: "Nenhum anúncio corresponde a esses filtros.", loadFail: "Não foi possível carregar os anúncios.",
       updates: "Últimas mudanças", upNew: "novo", upPrice: "preço", upGone: "saiu", upBack: "voltou", newBadge: "NOVO", gone: "Anúncio saiu",
-      outside: "Fora dos seus critérios", estTip: "Estimada a partir de preço, área e trajeto; região, estado e contato ainda não foram avaliados",
+      outside: "Fora dos seus critérios", estTip: "Estimada a partir de preço, área, trajeto e dados da região; estado e contato ainda não foram avaliados",
       redFlag: n => n === 1 ? "Sinal de alerta" : `${n} sinais de alerta`, warm: "total", cold: "sem custos", rooms: n => `${n} ${n === 1 ? "cômodo" : "cômodos"}`,
       floor: f => f === 0 ? "térreo" : f < 0 ? "subsolo" : `${f}º andar`, from: d => `a partir de ${d}`, now: "disponível já",
       commuteChip: (l, m, mode) => `${l} ${m} min · ${mode}`, commuteUnknown: l => `${l} ?`, commuteUnknownTip: "Tempo de trajeto desconhecido: a consulta falhou ou falta o endereço.", overLimit: m => `Acima do seu limite de ${m} min`, withinLimit: m => `Dentro do seu limite de ${m} min`,
@@ -659,7 +695,7 @@ body.setup .wrap{display:none}
       rentPart: "Aluguel total", loanPart: "Parcela do financiamento", reservePart: "Reserva de manutenção", limitLine: (a, p) => `Seu limite ${a} (${p} da renda)`, noIncome: "Informe sua renda líquida nas Configurações para ver seu limite.", costEmpty: "Escolha anúncios acima para comparar os custos.",
       costNote: "As barras mostram os custos mensais de moradia. Aluguel: aluguel total (aluguel mais custos adicionais). Compra: parcela do financiamento com seus juros e prazo mais a reserva de manutenção; imposto predial e taxa de condomínio não estão incluídos. Pagamento único: caução e repasse, ou a entrada, que paga primeiro os custos de compra; a parte que a entrada não cobre é financiada.",
       cmp: "Anúncios escolhidos lado a lado", cols: ["Anúncio", "Pontos", "Aluguel/compra", "Aluguel total / preço", "€/m²", "Cômodos", "m²", "Andar", "Disponível", "Trajeto", "Orçamento", "Status"],
-      howto: "A pontuação combina as notas que você pondera nas Configurações: preço, área, trajeto, região, estado e contato. Anúncios sem avaliação recebem uma estimativa (≈) a partir de preço, área e trajeto. Filtros, mapa e gráfico trabalham juntos: restrinja a lista e clique num marcador ou ponto para abrir o anúncio. Salvar um anúncio não contata ninguém.",
+      howto: "A pontuação combina as notas que você pondera nas Configurações: preço, área, trajeto, região, estado e contato. Anúncios sem avaliação recebem uma estimativa (≈) a partir de preço, área, trajeto e dados da região. Filtros, mapa e gráfico trabalham juntos: restrinja a lista e clique num marcador ou ponto para abrir o anúncio. Salvar um anúncio não contata ninguém.",
       welcomeTitle: "Nenhum anúncio ainda", welcomeText: "Adicione um anúncio de que você gostou e o Flat Hunt o confere com seus critérios, tempos de trajeto e orçamento." }
   };
   const STATUSES = ["new", "contacted", "viewing-invited", "viewing-done", "applied", "docs-requested", "accepted", "rejected", "dropped", "gone"];
@@ -863,7 +899,8 @@ body.setup .wrap{display:none}
   const openSettings = () => Setup.open({ mode: "settings", lang, onSaved: () => load() });
   const addListing = () => Setup.addListing({ lang, onSaved: () => load() });
   const scoreTxt = c => c.score == null ? "–" : (c.scoreEstimated ? "≈" : "") + c.score;
-  const estTitle = (node, c) => { if (c && c.scoreEstimated) node.title = T.estTip; return node; };
+  // The estimate tooltip also explains the area part (public/area-ui.js) once the area facts exist.
+  const estTitle = (node, c) => { if (c && c.scoreEstimated) node.title = T.estTip + (c.area ? "\n\n" + AreaUI.ratingTip(c, lang) : ""); return node; };
   // First run: no listings yet. A welcome card replaces the panels that need data.
   function renderWelcome() {
     const host = $("#welcome"), empty = !listings.length; host.hidden = !empty; host.innerHTML = "";
@@ -887,7 +924,7 @@ body.setup .wrap{display:none}
     $("#addlisting").textContent = T.head[0]; $("#addlisting").onclick = addListing;
     $("#settings").textContent = T.head[1]; $("#settings").onclick = openSettings;
     const ab = $("#aboutbtn"); ab.textContent = T.head[2]; ab.setAttribute("aria-pressed", aboutOpen); ab.onclick = () => toggleAbout();
-    $("#maptitle").textContent = T.map; $("#listtitle").textContent = T.list; $("#cmptitle").textContent = T.cmp; $("#howto").textContent = T.howto;
+    $("#maptitle").textContent = T.map; $("#listtitle").textContent = T.list; $("#cmptitle").textContent = T.cmp; $("#howto").textContent = T.howto; AreaUI.footer($("#sources"), lang);
     // Jump links only for sections that currently have content.
     const any = listings.length > 0;
     const has = { aboutme: aboutOpen, decision: any, listings: any, costs: any, explore: any, compare: costSelected.some(id => listings.some(c => c.id === id)) };
@@ -1109,7 +1146,7 @@ body.setup .wrap{display:none}
     const pps = Criteria.pricePerSqm(c); if (pps != null) facts.append(el("span", "fact", eurSqm(pps)));
     if (known(c.floor)) facts.append(el("span", "fact", T.floor(c.floor)));
     if (c.availableFrom) facts.append(el("span", "fact", c.availableFrom <= new Date().toISOString().slice(0, 10) ? T.now : T.from(fmtDate(c.availableFrom))));
-    const extra = el("div", "facts"); extra.append(affordChip(c));
+    const extra = el("div", "facts"); extra.append(affordChip(c), ...AreaUI.badges(c, { lang, queued: areaQueued.has(c.id) }));
     mid.append(h, l2, facts, commuteChips(c), extra); row.append(mid);
     const side = el("div", "rowside"); side.append(ring(c));
     side.append(el("span", "pill s-" + c.status, T.status[c.status] || c.status));
@@ -1194,12 +1231,14 @@ body.setup .wrap{display:none}
       left.append(cdl);
     }
     const af = el("div", "facts afford"); af.append(el("span", "muted", T.affordH + ": "), affordChip(c)); left.append(af);
+    // Area facts (public/area-ui.js): places, flood, noise, crime, census rent and the price check, each with its source.
+    const areaSec = el("section", "area"); AreaUI.panel(areaSec, c, { lang, listings, queued: areaQueued.has(c.id), onChanged: () => load() }); left.append(areaSec);
     if (tf(c, "verdict") || (tf(c, "pros") || []).length || (tf(c, "cons") || []).length) {
       left.append(el("h3", "sp", T.take), el("p", "verdict", tf(c, "verdict") || ""));
       const pc = el("div", "pc"); const plus = el("ul", "plus"); (tf(c, "pros") || []).forEach(p => plus.append(el("li", null, p))); const minus = el("ul", "minus"); (tf(c, "cons") || []).forEach(p => minus.append(el("li", null, p))); pc.append(plus, minus); left.append(pc);
     }
     const rt = c.rating || (c.scoreEstimated ? Criteria.estimateRating(c, P) : null);
-    if (rt) { const bars = el("div", "bars"); RATING_KEYS.forEach(k => { const known_ = rt[k] != null; bars.append(el("span", "bl", T.rating[k])); const bt = el("div", "bt"); if (known_) { const v = Math.max(0, Math.min(10, rt[k])); const bf = el("div", "bf"); bf.style.width = v * 10 + "%"; bf.style.background = v >= 7 ? "var(--good)" : v >= 5 ? "var(--warn)" : "var(--bad)"; bt.append(bf); } bars.append(bt, el("span", "bv", known_ ? rt[k] + "/10" : "?")); }); if (c.scoreEstimated) bars.title = T.estTip; left.append(bars); }
+    if (rt) { const bars = el("div", "bars"); RATING_KEYS.forEach(k => { const known_ = rt[k] != null; const blab = el("span", "bl", T.rating[k]); bars.append(blab); const bt = el("div", "bt"); if (k === "area" && c.scoreEstimated) { blab.title = bt.title = AreaUI.ratingTip(c, lang); blab.classList.add("tipped"); } if (known_) { const v = Math.max(0, Math.min(10, rt[k])); const bf = el("div", "bf"); bf.style.width = v * 10 + "%"; bf.style.background = v >= 7 ? "var(--good)" : v >= 5 ? "var(--warn)" : "var(--bad)"; bt.append(bf); } bars.append(bt, el("span", "bv", known_ ? rt[k] + "/10" : "?")); }); if (c.scoreEstimated) bars.title = T.estTip; left.append(bars); }
     const qs = tf(c, "questions"); if (qs && qs.length) { const dq = el("details", "q"); dq.append(el("summary", null, T.questions + " (" + qs.length + ")")); const ol = el("ol"); qs.forEach(q => ol.append(el("li", null, q))); dq.append(ol); left.append(dq); }
     body.append(left);
     const right = el("div", "col"); right.append(el("h3", null, T.conv));
@@ -1302,6 +1341,23 @@ body.setup .wrap{display:none}
     });
     return arr;
   };
+  // ---------- area queue ----------
+  // Listings whose area facts are queued or being computed; polled every 10 s while any are, and the listings reloaded when one finishes.
+  let areaQueued = new Set(), areaPoll = null;
+  async function fetchAreaQueue() {
+    try { const r = await fetch("/api/area/queue", { cache: "no-store" }); if (!r.ok) return null; const j = await r.json(); return new Set([...(j.queued || []), j.running].filter(Boolean)); } catch (e) { return null; }
+  }
+  function setAreaQueue(s) {
+    if (s) areaQueued = s;
+    if (areaQueued.size && !areaPoll) areaPoll = setInterval(pollArea, 10000);
+    else if (!areaQueued.size && areaPoll) { clearInterval(areaPoll); areaPoll = null; }
+  }
+  async function pollArea() {
+    const s = await fetchAreaQueue(); if (!s) return;
+    const done = [...areaQueued].some(id => !s.has(id)), added = [...s].some(id => !areaQueued.has(id));
+    setAreaQueue(s);
+    if (done) await refresh(); else if (added && P) render();
+  }
   async function load() {
     try {
       const rp = await fetch("/api/profile", { cache: "no-store" });
@@ -1311,8 +1367,9 @@ body.setup .wrap{display:none}
       try { CAT = await (await fetch("redflags.json")).json(); } catch (e) { CAT = []; }
       if (!P.languages.includes(lang)) { lang = P.languages[0]; T = I18N[lang]; }
       initFilters();
-      const [r1, r2] = await Promise.all([fetch("/api/listings", { cache: "no-store" }), fetch("/api/meta", { cache: "no-store" })]);
+      const [r1, r2, q] = await Promise.all([fetch("/api/listings", { cache: "no-store" }), fetch("/api/meta", { cache: "no-store" }), fetchAreaQueue()]);
       if (!r1.ok) throw new Error(r1.status);
+      setAreaQueue(q);
       raw = (await r1.json()).listings || {}; listings = toList(raw); if (r2.ok) meta = await r2.json();
       render();
       if (location.hash.startsWith("#listing-")) { const t = document.getElementById(location.hash.slice(1)); if (t) t.scrollIntoView({ block: "start" }); }
@@ -1321,7 +1378,7 @@ body.setup .wrap{display:none}
   }
   async function refresh() {
     if (document.activeElement && document.activeElement.closest(".controls, .docs, aside.filters, dialog")) return;
-    try { const [r1, r2] = await Promise.all([fetch("/api/listings", { cache: "no-store" }), fetch("/api/meta", { cache: "no-store" })]); if (r1.ok) { raw = (await r1.json()).listings || {}; listings = toList(raw); if (r2.ok) meta = await r2.json(); render(); } } catch (e) {}
+    try { const [r1, r2, q] = await Promise.all([fetch("/api/listings", { cache: "no-store" }), fetch("/api/meta", { cache: "no-store" }), fetchAreaQueue()]); setAreaQueue(q); if (r1.ok) { raw = (await r1.json()).listings || {}; listings = toList(raw); if (r2.ok) meta = await r2.json(); render(); } } catch (e) {}
   }
   load();
   // setup.js reads the profile through window.FlatHunt.

@@ -4,7 +4,7 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const { spawnSync } = require("node:child_process");
-const { start, TEST_VAULT_KEY, OTHER_VAULT_KEY } = require("./helpers");
+const { start, TEST_VAULT_KEY, OTHER_VAULT_KEY, pdfPageStreams, hasPdfText } = require("./helpers");
 
 const json = (h = {}) => ({ ...h, "Content-Type": "application/json" });
 const withVault = (o = {}) => start({ vaultKey: TEST_VAULT_KEY, ...o });
@@ -122,5 +122,22 @@ test("vault and applicant routes need the password", async () => {
   try {
     for (const [m, p] of [["GET", "/api/applicant"], ["PUT", "/api/applicant"], ["GET", "/api/vault"], ["POST", "/api/vault"], ["GET", "/api/vault/status"], ["GET", "/api/applicant/summary.pdf"], ["DELETE", "/api/shares/x"], ["POST", "/api/listings/x/doc-requests"], ["POST", "/api/listings/x/shares"], ["GET", "/api/listings/x/shares"]])
       assert.equal((await fetch(s.base + p, { method: m })).status, 401, m + " " + p);
+  } finally { await s.close(); }
+});
+
+// ---------- Task 3: applicant summary ----------
+test("summary.pdf: 404 without applicant, 400 for an unknown language, one page with the name otherwise", async () => {
+  const s = await withVault();
+  try {
+    assert.equal((await fetch(s.base + "/api/applicant/summary.pdf", { headers: s.auth })).status, 404);
+    await fetch(s.base + "/api/applicant", { method: "PUT", headers: json(s.auth), body: JSON.stringify(applicant()) });
+    assert.equal((await fetch(s.base + "/api/applicant/summary.pdf?lang=fr", { headers: s.auth })).status, 400);
+    const r = await fetch(s.base + "/api/applicant/summary.pdf?lang=de", { headers: s.auth });
+    assert.equal(r.status, 200);
+    assert.equal(r.headers.get("content-type"), "application/pdf");
+    const pages = await pdfPageStreams(Buffer.from(await r.arrayBuffer()));
+    assert.equal(pages.length, 1);
+    assert.ok(hasPdfText(pages[0], "Alex Example"));
+    assert.ok(hasPdfText(pages[0], "Selbstauskunft (Kurzfassung)"));
   } finally { await s.close(); }
 });

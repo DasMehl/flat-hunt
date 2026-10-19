@@ -72,3 +72,42 @@ test("sniffMime reads magic bytes", () => {
   assert.equal(V.sniffMime(Buffer.from("GIF89a")), null);
   assert.equal(V.sniffMime(Buffer.alloc(0)), null);
 });
+
+test("document names must be vault ids; anything else throws and writes nothing", async () => {
+  const dir = tmp(), v = V.openVault(dir, V.parseVaultKey(KEY));
+  for (const bad of ["../escape", "abc", "0123456789abcdeg", "", "0123456789abcdef/../x", undefined]) {
+    await assert.rejects(async () => v.writeDoc(bad, Buffer.from("x")), /bad document name/, String(bad));
+  }
+  assert.ok(!fs.existsSync(path.join(dir, "escape.bin")));
+  assert.deepEqual(fs.readdirSync(path.join(dir, "vault")), ["keycheck.bin"]);
+});
+
+test("each file is bound to its role: swapped files do not decrypt", async () => {
+  const dir = tmp(), key = V.parseVaultKey(KEY), v = V.openVault(dir, key);
+  await v.saveIndex(); await v.saveApplicant({ name: "Alex Example" });
+  const a = path.join(dir, "vault", "applicant.json"), i = path.join(dir, "vault", "index.json"), t = a + ".swap";
+  fs.renameSync(a, t); fs.renameSync(i, a); fs.renameSync(t, i);
+  assert.throws(() => V.openVault(dir, key));
+  const id = "0123456789abcdef", other = "fedcba9876543210";
+  await v.writeDoc(id, Buffer.from("%PDF-1.4 x"));
+  fs.copyFileSync(path.join(dir, "vault", id + ".bin"), path.join(dir, "vault", other + ".bin"));
+  await assert.rejects(v.readDoc(other));
+});
+
+test("vaultStatus ignores dotfiles and temp files", () => {
+  const dir = tmp();
+  fs.mkdirSync(path.join(dir, "vault"));
+  fs.writeFileSync(path.join(dir, "vault", ".DS_Store"), "x");
+  fs.writeFileSync(path.join(dir, "vault", "keycheck.bin.1.tmp"), "x");
+  assert.equal(V.vaultStatus(dir, null), "empty");
+  assert.ok(V.openVault(dir, V.parseVaultKey(KEY)));
+  assert.equal(V.vaultStatus(dir, V.parseVaultKey(KEY)), "ok");
+});
+
+test("an unreadable key check is 'unreadable', not 'wrong-key'", { skip: process.getuid && process.getuid() === 0 }, () => {
+  const dir = tmp(), key = V.parseVaultKey(KEY);
+  V.openVault(dir, key);
+  const f = path.join(dir, "vault", "keycheck.bin");
+  fs.chmodSync(f, 0);
+  try { assert.equal(V.vaultStatus(dir, key), "unreadable"); } finally { fs.chmodSync(f, 0o600); }
+});

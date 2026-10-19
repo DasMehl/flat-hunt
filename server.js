@@ -399,13 +399,15 @@ if (require.main === module) {
       console.error("SITE_PASSWORD is not set. Set it, or set ALLOW_OPEN=1 to run without a password (local use only).");
       process.exit(1);
     }
-    console.warn("Warning: ALLOW_OPEN=1 and no SITE_PASSWORD: anyone who can reach this server can see and edit the hunt.");
+    if (process.env.VAULT_KEY) { console.error("The document vault needs SITE_PASSWORD. Set it; ALLOW_OPEN=1 cannot be combined with VAULT_KEY."); process.exit(1); }
+    console.warn("Warning: ALLOW_OPEN=1 and no SITE_PASSWORD: anyone who can reach this server can see and edit the hunt. The document vault is disabled.");
   }
   let vaultKey = null;
   try { vaultKey = process.env.VAULT_KEY ? parseVaultKey(process.env.VAULT_KEY) : null; }
   catch (e) { console.error(e.message); process.exit(1); }
   const vs = vaultStatus(process.env.DATA_DIR || path.join(__dirname, "data"), vaultKey);
   if (vs === "missing-key") { console.error("The document vault (DATA_DIR/vault) holds data but VAULT_KEY is not set. Set the VAULT_KEY it was created with; without it the documents cannot be read."); process.exit(1); }
+  if (vs === "unreadable") { console.error("The document vault (DATA_DIR/vault) cannot be read (I/O or permission error). Check the folder's permissions."); process.exit(1); }
   if (vs === "wrong-key") { console.error("VAULT_KEY does not open the document vault (DATA_DIR/vault). Set the VAULT_KEY it was created with."); process.exit(1); }
   if (!vaultKey) console.warn("VAULT_KEY is not set: the applicant profile, documents and share links are off.");
   const port = process.env.PORT || 3000;

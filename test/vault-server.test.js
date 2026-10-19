@@ -61,3 +61,25 @@ test("the server refuses to start with vault data and a missing, wrong or malfor
   assert.equal(empty.status, null);
   assert.match(empty.stderr, /VAULT_KEY is not set/);
 });
+
+test("the server refuses a VAULT_KEY without SITE_PASSWORD, even with ALLOW_OPEN=1", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "flat-hunt-start-"));
+  const r = runServer({ DATA_DIR: dir, SITE_PASSWORD: "", ALLOW_OPEN: "1", VAULT_KEY: TEST_VAULT_KEY });
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /document vault needs SITE_PASSWORD/);
+  const open = runServer({ DATA_DIR: dir, SITE_PASSWORD: "", ALLOW_OPEN: "1" });
+  assert.equal(open.status, null);
+  assert.match(open.stderr, /vault is disabled/);
+});
+
+test("the server refuses to start when the vault cannot be read", { skip: process.getuid && process.getuid() === 0 }, async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "flat-hunt-start-"));
+  await (await withVault({ dataDir: dir })).close();
+  const f = path.join(dir, "vault", "keycheck.bin");
+  fs.chmodSync(f, 0);
+  try {
+    const r = runServer({ DATA_DIR: dir, VAULT_KEY: TEST_VAULT_KEY });
+    assert.equal(r.status, 1);
+    assert.match(r.stderr, /cannot be read/);
+  } finally { fs.chmodSync(f, 0o600); }
+});

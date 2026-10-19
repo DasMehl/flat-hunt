@@ -52,7 +52,7 @@ test("noiseAt has no adapter outside NRW and Berlin, and fails as a whole when o
   assert.equal(await N.noiseAt({ lat: 48.137, lon: 11.575 }, "09162", async () => { throw new Error("must not be called"); }, noWait), null);
   assert.equal(N.adapterFor(undefined), null);
   let n = 0;
-  const f = async () => { n++; if (n === 3) return { ok: false, status: 500, headers: { get: () => null } }; return reply("<x/>"); };
+  const f = async () => { n++; if (n === 3) return { ok: false, status: 500, headers: { get: () => null } }; return reply("<FeatureInfoResponse/>"); };
   await assert.rejects(N.noiseAt(KOE, "05111", f, noWait), /HTTP 500/);
 });
 

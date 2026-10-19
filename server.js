@@ -39,7 +39,7 @@ function createApp(options = {}) {
     listings: readJson(files.listings, null),
     meta: readJson(files.meta, { lastCheck: null, log: [] }),
     profile: readJson(files.profile, null),
-    shares: readJson(files.shares, { shares: [] }).shares
+    shares: (readJson(files.shares, { shares: [] }).shares) || []
   };
   if (!state.listings) {
     state.listings = {};
@@ -318,13 +318,21 @@ function createApp(options = {}) {
     const revoked = state.shares.filter(s => s.listingId === id && !s.revokedAt);
     const at = now().toISOString();
     for (const s of revoked) s.revokedAt = at;
-    try { await persist(); if (revoked.length) await persistShares(); }
-    catch (e) {
-      for (const s of revoked) if (s.revokedAt === at) s.revokedAt = null;
+    const restoreListing = () => {
       if (!state.listings[id]) state.listings[id] = c;
       if (state.meta.log.every(e => e.id !== id)) state.meta.log = [...state.meta.log, ...log.filter(e => e.id === id)].sort((a, b) => log.indexOf(a) - log.indexOf(b));
-      return res.status(500).json({ error: "save failed" });
+    };
+    // Shares first: if only the listing write fails afterwards, the links stay revoked (fail closed).
+    if (revoked.length) {
+      try { await persistShares(); }
+      catch (e) {
+        for (const s of revoked) if (s.revokedAt === at) s.revokedAt = null;
+        restoreListing();
+        return res.status(500).json({ error: "save failed" });
+      }
     }
+    try { await persist(); }
+    catch (e) { restoreListing(); return res.status(500).json({ error: "save failed" }); }
     // Photos are named <id>-N; skip files of another listing whose id itself starts with "<id>-".
     const img = path.join(dataDir, "img"), others = Object.keys(state.listings).filter(o => o.startsWith(id + "-"));
     try {

@@ -109,3 +109,96 @@ test("share routes answer 503 without a vault", async () => {
     assert.equal((await fetch(s.base + "/api/shares/x", { method: "DELETE", headers: s.auth })).status, 503);
   } finally { await s.close(); }
 });
+
+// ---------- fix round 1: rollbacks, status ruling, delete ordering ----------
+const breakFile = (s, name) => { const p = path.join(s.dir, name); fs.rmSync(p, { force: true }); fs.mkdirSync(p); };
+const listingsDisk = s => JSON.parse(fs.readFileSync(path.join(s.dir, "listings.json"), "utf8"));
+const sharesDisk = s => JSON.parse(fs.readFileSync(path.join(s.dir, "shares.json"), "utf8")).shares;
+
+test("a failed save rolls back a logged document request", async () => {
+  const s = await setup();
+  try {
+    breakFile(s, "listings.json");
+    const r = await fetch(s.base + "/api/listings/flat/doc-requests", { method: "POST", headers: json(s.auth), body: JSON.stringify({ types: ["id"] }) });
+    assert.deepEqual([r.status, (await r.json()).error], [500, "save failed"]);
+    const l = await (await fetch(s.base + "/api/listings", { headers: s.auth })).json();
+    const flatNow = (l.listings || l).flat;
+    assert.equal(flatNow.status, "new");
+    assert.equal(flatNow.docRequests, undefined);
+  } finally { await s.close(); }
+});
+
+test("a request on a decided listing is recorded but keeps its status", async () => {
+  const s = await setup();
+  try {
+    for (const status of ["accepted", "rejected", "dropped", "gone"]) {
+      await fetch(s.base + "/api/listings/flat", { method: "PUT", headers: s.sync, body: JSON.stringify({ ...flat, status }) });
+      await fetch(s.base + "/api/listings/flat", { method: "PATCH", headers: json(s.auth), body: JSON.stringify({ status }) });
+      const r = await fetch(s.base + "/api/listings/flat/doc-requests", { method: "POST", headers: json(s.auth), body: JSON.stringify({ types: ["id"] }) });
+      const { listing } = await r.json();
+      assert.equal(listing.status, status);
+      assert.ok(listing.docRequests.length >= 1);
+    }
+  } finally { await s.close(); }
+});
+
+test("a failed save rolls back share creation and revocation", async () => {
+  const s = await setup();
+  try {
+    const a = (await s.share()).body.share;
+    const before = fs.readFileSync(path.join(s.dir, "shares.json"), "utf8");
+    fs.rmSync(path.join(s.dir, "shares.json")); fs.mkdirSync(path.join(s.dir, "shares.json"));
+    const c = await s.share();
+    assert.deepEqual([c.status, c.body.error], [500, "save failed"]);
+    const r = await fetch(s.base + "/api/shares/" + a.id, { method: "DELETE", headers: s.auth });
+    assert.equal(r.status, 500);
+    fs.rmSync(path.join(s.dir, "shares.json"), { recursive: true }); fs.writeFileSync(path.join(s.dir, "shares.json"), before);
+    const list = await (await fetch(s.base + "/api/listings/flat/shares", { headers: s.auth })).json();
+    assert.equal(list.shares.length, 1);
+    assert.equal(list.shares[0].revokedAt, null);
+    assert.equal(fs.readFileSync(path.join(s.dir, "shares.json"), "utf8"), before);
+  } finally { await s.close(); }
+});
+
+test("revoking twice keeps the first revokedAt", async () => {
+  const s = await setup();
+  try {
+    const a = (await s.share()).body.share;
+    const first = (await (await fetch(s.base + "/api/shares/" + a.id, { method: "DELETE", headers: s.auth })).json()).share.revokedAt;
+    s.setClock("2026-10-21T10:00:00Z");
+    const second = (await (await fetch(s.base + "/api/shares/" + a.id, { method: "DELETE", headers: s.auth })).json()).share.revokedAt;
+    assert.equal(second, first);
+  } finally { await s.close(); }
+});
+
+test("deleting a listing: shares are written first; a failed shares write rolls back everything", async () => {
+  const s = await setup();
+  try {
+    const sh = (await s.share()).body.share;
+    const sharesBefore = fs.readFileSync(path.join(s.dir, "shares.json"), "utf8");
+    const listingsBefore = fs.readFileSync(path.join(s.dir, "listings.json"), "utf8");
+    fs.rmSync(path.join(s.dir, "shares.json")); fs.mkdirSync(path.join(s.dir, "shares.json"));
+    const r = await fetch(s.base + "/api/listings/flat", { method: "DELETE", headers: s.auth });
+    assert.equal(r.status, 500);
+    assert.equal(fs.readFileSync(path.join(s.dir, "listings.json"), "utf8"), listingsBefore);
+    fs.rmSync(path.join(s.dir, "shares.json"), { recursive: true }); fs.writeFileSync(path.join(s.dir, "shares.json"), sharesBefore);
+    assert.equal(sharesDisk(s).find(x => x.id === sh.id).revokedAt, null);
+    const list = await (await fetch(s.base + "/api/listings/flat/shares", { headers: s.auth })).json();
+    assert.equal(list.shares[0].revokedAt, null);
+    assert.equal((await fetch(s.base + "/api/listings/flat/shares", { headers: s.auth })).status, 200);
+  } finally { await s.close(); }
+});
+
+test("deleting a listing: a failed listing write after the shares were revoked keeps them revoked", async () => {
+  const s = await setup();
+  try {
+    const sh = (await s.share()).body.share;
+    breakFile(s, "listings.json");
+    const r = await fetch(s.base + "/api/listings/flat", { method: "DELETE", headers: s.auth });
+    assert.equal(r.status, 500);
+    assert.ok(sharesDisk(s).find(x => x.id === sh.id).revokedAt);
+    const list = await (await fetch(s.base + "/api/listings/flat/shares", { headers: s.auth })).json();
+    assert.ok(list.shares[0].revokedAt);
+    assert.equal((await fetch(s.base + "/api/listings/flat/shares", { headers: s.auth })).status, 200);
+  } finally { await s.close(); }
+});

@@ -1,0 +1,1022 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Car Hunt</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Inter+Tight:wght@600;700&display=swap">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+/* Layout: filters on the left rail, decision panels (map + chart + KPIs) up top, ranked list below. */
+:root {
+  --bg: #f5f6f8; --surface: #ffffff; --surface-2: #f0f2f5; --surface-3: #e4e8ee; --fg: #0f172a; --muted: #64748b; --line: #e2e6ec;
+  --accent: #1f4e9a; --accent-fg: #ffffff;
+  --good: #1d7a4b; --good-bg: #e2f3ea; --warn: #a86a0c; --warn-bg: #fbefd6; --bad: #b4393b; --bad-bg: #f9e3e3; --info: #2c5fb8; --info-bg: #e4ecfa;
+  --display: "Inter Tight", "Inter", system-ui, sans-serif; --body: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif; --radius: 12px; --shadow: 0 1px 2px rgba(16, 24, 40, .05);
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0e141b; --surface: #161e28; --surface-2: #1f2934; --surface-3: #2a3643; --fg: #e7ecf2; --muted: #93a1b3; --line: #2b3745;
+  --accent: #6f9ee6; --accent-fg: #0e141b; --good: #52c489; --good-bg: #163427; --warn: #e3ac4e; --warn-bg: #3a2d12; --bad: #e97373; --bad-bg: #3c1c1c; --info: #86aef0; --info-bg: #1b2a44; color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #0e141b; --surface: #161e28; --surface-2: #1f2934; --surface-3: #2a3643; --fg: #e7ecf2; --muted: #93a1b3; --line: #2b3745;
+  --accent: #6f9ee6; --accent-fg: #0e141b; --good: #52c489; --good-bg: #163427; --warn: #e3ac4e; --warn-bg: #3a2d12; --bad: #e97373; --bad-bg: #3c1c1c; --info: #86aef0; --info-bg: #1b2a44; color-scheme: dark; }
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--bg); color: var(--fg); font-family: var(--body); font-size: 14px; line-height: 1.5; -webkit-font-smoothing: antialiased; font-feature-settings: "cv11", "ss01"; padding-block: 0 48px; padding-inline: 16px; }
+.wrap { max-width: 1240px; margin: 0 auto; }
+h1, h2, h3 { font-family: var(--display); text-wrap: balance; margin: 0; letter-spacing: -0.015em; }
+a { color: var(--accent); }
+button, select, textarea, input { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.muted { color: var(--muted); }
+.num { font-variant-numeric: tabular-nums; }
+
+header.top { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 12px; padding-block: 22px 14px; }
+header.top h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.02em; }
+header.top .sub { color: var(--muted); margin-top: 3px; font-size: 13.5px; }
+.hright { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.lang { display: inline-flex; border: 1px solid var(--line); border-radius: 7px; overflow: hidden; }
+.lang button { background: var(--surface); border: 0; padding: 6px 11px; font-size: 12.5px; font-weight: 600; cursor: pointer; color: var(--muted); white-space: nowrap; }
+.lang button + button { border-left: 1px solid var(--line); }
+.lang button[aria-pressed="true"] { background: var(--accent); color: var(--accent-fg); }
+.newpill { background: var(--good-bg); color: var(--good); font-weight: 700; font-size: 13px; padding: 6px 11px; border-radius: 999px; cursor: pointer; border: 0; }
+
+.layout { display: grid; grid-template-columns: 260px 1fr; gap: 16px; align-items: start; }
+@media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+aside.filters { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); padding: 14px; position: sticky; top: 12px; display: grid; gap: 14px; }
+@media (max-width: 900px) { aside.filters { position: static; } }
+aside h3, .panel h3 { font-size: 12.5px; color: var(--muted); font-weight: 600; margin-bottom: 8px; letter-spacing: 0; }
+.chipset { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 4px 10px; font-size: 12.5px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+.chip[aria-pressed="true"] { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+.chip .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; opacity: .7; }
+.range { display: grid; gap: 4px; font-size: 13px; }
+.range label { display: flex; justify-content: space-between; color: var(--muted); }
+.range label b { color: var(--fg); font-variant-numeric: tabular-nums; }
+.range input { width: 100%; accent-color: var(--accent); }
+.toggles { display: grid; gap: 6px; font-size: 13.5px; }
+.toggles label { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+.toggles input { accent-color: var(--accent); width: 16px; height: 16px; margin: 0; }
+.reset { background: none; border: 0; color: var(--accent); font-size: 13px; cursor: pointer; padding: 0; text-align: left; }
+aside select { width: 100%; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 7px 8px; }
+
+.main { display: grid; gap: 16px; min-width: 0; }
+.main > * { min-width: 0; }
+.jumpnav { display: flex; flex-wrap: wrap; gap: 8px; padding: 3px 0; }
+.jumpnav a { border: 1px solid var(--line); border-radius: 999px; background: var(--surface); color: var(--fg); text-decoration: none; padding: 6px 12px; font-weight: 600; font-size: 12px; }
+.decision { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; display: grid; gap: 12px; }
+.decision-head { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; align-items: baseline; }
+.decision h2 { font-size: 20px; }.decision p { margin: 0; color: var(--muted); font-size: 12.5px; }
+.decision-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(195px, 1fr)); gap: 9px; }
+.decision-item { border: 1px solid var(--line); border-radius: 9px; padding: 11px; display: grid; gap: 5px; background: var(--surface); text-align: left; cursor: pointer; }
+.decision-item:hover, .decision-item:focus-visible { border-color: var(--accent); }
+.decision-item strong { line-height: 1.3; }.decision-item .money { font-variant-numeric: tabular-nums; font-weight: 700; color: var(--accent); }
+.decision-item small { color: var(--muted); }
+.visit { border-color: var(--accent); }
+.visit-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 9px; }
+.visit-list .decision-item { width: 100%; }
+.visit-list .visit-next { color: var(--fg); font-weight: 600; }
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); gap: 10px; }
+.kpi { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); padding: 12px 14px; cursor: pointer; text-align: left; }
+.kpi .v { font-family: var(--display); font-size: 24px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.kpi .l { font-size: 12.5px; color: var(--muted); margin-top: 2px; }
+.kpi .s { font-size: 12.5px; color: var(--muted); margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.panels { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 1000px) { .panels { grid-template-columns: 1fr; } }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); padding: 14px; min-width: 0; }
+#map { height: 360px; border-radius: 8px; background: var(--surface-2); }
+.leaflet-container { font: inherit; }
+.homepin { width: 14px; height: 14px; border-radius: 50%; background: var(--fg); border: 3px solid var(--surface); box-shadow: 0 0 0 2px var(--fg); }
+.carpin { width: 26px; height: 26px; border-radius: 50%; color: #fff; font: 600 11px/26px var(--display); text-align: center; border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,.35); cursor: pointer; }
+.carpin.dim { opacity: .4; }
+.chart svg { width: 100%; height: 360px; display: block; }
+.chart text { font-family: var(--body); font-size: 11px; fill: var(--muted); }
+.chart .grid { stroke: var(--line); stroke-width: 1; }
+.chart .budget { stroke: var(--warn); stroke-dasharray: 4 4; }
+.chart .pt { cursor: pointer; stroke: var(--surface); stroke-width: 1.5; }
+.chart .pt.dim { opacity: .25; }
+.chart .lbl { font-size: 10px; fill: var(--fg); pointer-events: none; }
+.legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--muted); margin-top: 6px; }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 5px; vertical-align: -1px; }
+.costs { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px; display: grid; gap: 14px; }
+.costs h2 { font-size: 20px; }
+.costs .intro { margin: 0; color: var(--muted); }
+.cost-inputs, .cost-picks { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; }
+.cost-inputs label { display: grid; gap: 3px; font-size: 12px; color: var(--muted); }
+.cost-inputs input { width: 105px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); }
+.cost-picks button { border: 1px solid var(--line); border-radius: 7px; background: var(--surface); padding: 5px 8px; cursor: pointer; font-size: 12px; }
+.cost-picks button[aria-pressed="true"] { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+.cost-rows { display: grid; gap: 12px; }
+.cost-row { display: grid; grid-template-columns: minmax(160px, 1fr) minmax(220px, 2fr) 135px; gap: 12px; align-items: center; }
+.cost-row strong { display: block; font-size: 13px; }
+.cost-row small { color: var(--muted); }
+.cost-bar { display: flex; width: 100%; height: 24px; overflow: hidden; border-radius: 5px; background: var(--surface-2); }
+.cost-detail { margin-top: 3px; color: var(--muted); font-size: 11px; }
+.cost-bar span { height: 100%; }
+.cost-bar .fuel, .cost-key .fuel { background: #278778; }.cost-bar .fixed, .cost-key .fixed { background: #7d8ca2; }.cost-bar .repair, .cost-key .repair { background: #d79736; }.cost-bar .loan, .cost-key .loan { background: #4778c0; }
+.cost-total { font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; }
+.cost-key { display: flex; flex-wrap: wrap; gap: 12px; color: var(--muted); font-size: 12px; }.cost-key i { display: inline-block; width: 10px; height: 10px; margin-right: 4px; }
+.cost-note { margin: 0; color: var(--muted); font-size: 12px; }
+@media (max-width: 700px) { .cost-row { grid-template-columns: 1fr auto; gap: 5px; }.cost-graph { grid-column: 1 / -1; grid-row: 2; }.cost-total { grid-column: 2; grid-row: 1; } }
+
+.updates { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); padding: 12px 14px; }
+.updates ul { margin: 6px 0 0; padding: 0; list-style: none; display: grid; gap: 4px; font-size: 13.5px; }
+.updates li { display: flex; gap: 10px; align-items: baseline; }
+.updates .d { color: var(--muted); font-variant-numeric: tabular-nums; min-width: 78px; }
+.tag { display: inline-block; font-size: 11.5px; font-weight: 600; padding: 2px 7px; border-radius: 5px; }
+.tag.new { background: var(--good-bg); color: var(--good); }
+.tag.price { background: var(--info-bg); color: var(--info); }
+.tag.gone { background: var(--bad-bg); color: var(--bad); }
+.tag.back { background: var(--warn-bg); color: var(--warn); }
+.tag.out{background:var(--warn);color:#fff}.crit{border-left:3px solid var(--warn);padding:6px 10px;margin:0 0 10px}.crit ul{margin:4px 0 0 18px}
+
+.listhead { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 8px; }
+.listhead h2 { font-size: 20px; }
+.listhead .actions { display: flex; gap: 8px; align-items: center; }
+.more { border: 1px solid var(--line); border-radius: 7px; background: var(--surface); padding: 8px 12px; cursor: pointer; font-weight: 600; }
+.cards { display: grid; gap: 8px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; }
+.card.is-out { opacity: .55; }
+.card.open { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.row { display: grid; grid-template-columns: 128px 1fr auto; gap: 14px; align-items: center; padding: 10px 12px 10px 10px; cursor: pointer; }
+.row:hover { background: var(--surface-2); }
+.thumbwrap { position: relative; }
+.row .thumb { width: 128px; aspect-ratio: 4/3; object-fit: cover; border-radius: 6px; display: block; background: var(--surface-2); max-width: 100%; }
+.badge-new { position: absolute; top: 6px; left: 6px; }
+.ph { display: grid; place-items: center; color: var(--muted); background: var(--surface-2); border-radius: 6px; aspect-ratio: 4/3; }
+.ph svg { width: 44%; max-width: 72px; height: auto; opacity: .7; }
+.row .thumb.ph { display: grid; }
+.photos .mainimg.ph { display: grid; border-radius: 0; width: 100%; }
+.welcome { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); padding: 28px 24px; display: grid; gap: 10px; justify-items: start; }
+.welcome h2 { font-size: 22px; }
+.welcome p { margin: 0; color: var(--muted); max-width: 60ch; }
+.welcome-actions { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; margin-top: 6px; }
+.welcome-actions .btn { height: 40px; padding: 0 18px; border-radius: 999px; font-size: 14px; }
+.ring.est .n { font-size: 15px; }
+.rowmain { min-width: 0; display: grid; gap: 5px; }
+.rowmain h2 { font-size: 16.5px; font-weight: 600; line-height: 1.25; display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: baseline; }
+.rowmain h2 .seller { font: 500 11.5px/1 var(--body); letter-spacing: 0; padding: 4px 7px; border-radius: 5px; }
+.seller.d { background: var(--info-bg); color: var(--info); } .seller.p { background: var(--surface-3); color: var(--muted); }
+.rowmain .line2 { color: var(--muted); font-size: 13px; }
+.rowmain .line2 b { color: var(--fg); font-weight: 600; }
+.facts { display: flex; flex-wrap: wrap; gap: 5px 6px; }
+.fact { font-size: 12.5px; padding: 3px 8px; border-radius: 6px; font-weight: 500; background: var(--surface-2); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.fact.good { background: var(--good-bg); color: var(--good); } .fact.warn { background: var(--warn-bg); color: var(--warn); } .fact.bad { background: var(--bad-bg); color: var(--bad); }
+.fact.price { font-family: var(--display); font-weight: 600; font-size: 14px; letter-spacing: -0.01em; }
+.eq { display: flex; flex-wrap: wrap; gap: 4px; }
+.eq span { font-size: 11.5px; font-weight: 500; padding: 2px 7px; border-radius: 5px; border: 1px solid var(--line); color: var(--muted); }
+.eq span.on { border-color: transparent; background: var(--surface-3); color: var(--fg); }
+.eq span.maybe { border-style: dashed; color: var(--fg); }
+.rowside { display: grid; grid-template-columns: auto auto; gap: 6px 12px; align-items: center; justify-items: end; }
+.ring { width: 56px; height: 56px; position: relative; grid-row: span 2; }
+.ring svg { width: 56px; height: 56px; transform: rotate(-90deg); }
+.ring .bg { fill: none; stroke: var(--surface-3); stroke-width: 5; }
+.ring .fg { fill: none; stroke-width: 5; stroke-linecap: round; }
+.ring .n { position: absolute; inset: 0; display: grid; place-items: center; font: 600 17px var(--display); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.pill { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 999px; white-space: nowrap; background: var(--surface-2); color: var(--fg); }
+.pill::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.pill.s-candidate { background: var(--surface-2); color: var(--muted); }
+.pill.s-contacted { background: var(--info-bg); color: var(--info); }
+.pill.s-replied, .pill.s-call { background: var(--warn-bg); color: var(--warn); }
+.pill.s-viewing, .pill.s-bought { background: var(--good-bg); color: var(--good); }
+.pill.s-declined, .pill.s-dropped { background: var(--bad-bg); color: var(--bad); }
+.pick { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 600; cursor: pointer; padding: 4px 8px; border-radius: 6px; border: 1px solid var(--line); }
+.pick input { accent-color: var(--good); width: 15px; height: 15px; margin: 0; }
+.pick.on { border-color: var(--good); color: var(--good); background: var(--good-bg); }
+.compare-toggle { border: 1px solid var(--line); background: var(--surface); border-radius: 6px; padding: 5px 8px; font-size: 12px; font-weight: 600; cursor: pointer; }
+.compare-toggle[aria-pressed="true"] { background: var(--info-bg); color: var(--info); border-color: var(--info); }
+.compare-toggle:disabled { opacity: .45; cursor: not-allowed; }
+.cards { container-type: inline-size; }
+@container (max-width: 720px) { .row { grid-template-columns: 96px 1fr; } .row .thumb { width: 96px; } .rowside { grid-column: 1 / -1; grid-template-columns: auto 1fr auto; justify-items: start; } .ring { grid-row: auto; } }
+
+.detail { border-top: 1px solid var(--line); }
+.dhead { display: grid; grid-template-columns: 320px 1fr; }
+@media (max-width: 760px) { .dhead { grid-template-columns: 1fr; } }
+.photos .mainimg { aspect-ratio: 4/3; width: 100%; object-fit: cover; display: block; max-width: 100%; }
+.photos .thumbs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3px; padding: 3px; background: var(--surface-2); }
+.photos .thumbs img { aspect-ratio: 4/3; width: 100%; object-fit: cover; display: block; cursor: pointer; border-radius: 3px; opacity: .75; max-width: 100%; }
+.photos .thumbs img.on { opacity: 1; outline: 2px solid var(--accent); }
+.dfacts { padding: 14px 18px; display: grid; gap: 12px; min-width: 0; }
+.specs { display: grid; grid-template-columns: 1fr; gap: 0; font-size: 13px; margin: 0; }
+.specs div { display: grid; grid-template-columns: 128px 1fr; gap: 12px; border-bottom: 1px solid var(--line); padding: 6px 0; min-width: 0; }
+.specs div:last-child { border-bottom: 0; }
+.specs dt { color: var(--muted); } .specs dd { margin: 0; font-weight: 500; }
+.travel { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; }
+.travel div { background: var(--surface-2); border-radius: 8px; padding: 8px 10px; font-size: 13px; }
+.travel b { display: block; font-family: var(--display); font-size: 18px; font-weight: 600; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.links { display: flex; flex-wrap: wrap; gap: 8px; }
+.links a, .btn { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; padding: 7px 12px; border-radius: 7px; border: 1px solid var(--line); background: var(--surface); text-decoration: none; cursor: pointer; color: var(--fg); }
+.links a.primary, .btn.primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+.btn.danger { color: var(--bad); border-color: var(--bad); background: var(--surface); }
+.caractions { display: flex; flex-wrap: wrap; gap: 8px; padding-top: 10px; border-top: 1px solid var(--line); margin-top: 4px; }
+.phone { font-variant-numeric: tabular-nums; user-select: all; }
+.dbody { border-top: 1px solid var(--line); display: grid; grid-template-columns: 1fr 1fr; }
+@media (max-width: 760px) { .dbody { grid-template-columns: 1fr; } }
+.col { padding: 14px 18px; min-width: 0; }
+.col + .col { border-left: 1px solid var(--line); }
+@media (max-width: 760px) { .col + .col { border-left: 0; border-top: 1px solid var(--line); } }
+.col h3 { font-size: 12.5px; color: var(--muted); font-weight: 600; margin-bottom: 8px; letter-spacing: 0; }
+.verdict { font-size: 14.5px; margin: 0 0 10px; }
+.pc { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 13.5px; }
+@media (max-width: 500px) { .pc { grid-template-columns: 1fr; } }
+.pc ul { margin: 0; padding-left: 16px; } .pc li { margin-bottom: 3px; }
+.pc .plus { color: var(--good); } .pc .minus { color: var(--bad); }
+.bars { display: grid; grid-template-columns: max-content 1fr max-content; gap: 5px 10px; align-items: center; font-size: 12.5px; margin-top: 12px; }
+.bars .bl { color: var(--muted); } .bars .bt { height: 7px; background: var(--surface-2); border-radius: 4px; overflow: hidden; } .bars .bf { height: 100%; border-radius: 4px; } .bars .bv { font-variant-numeric: tabular-nums; color: var(--muted); }
+details.q summary { cursor: pointer; font-size: 13.5px; color: var(--accent); font-weight: 600; margin-top: 10px; }
+details.q ol { margin: 6px 0 0; padding-left: 18px; font-size: 13.5px; color: var(--muted); }
+.timeline { display: flex; flex-direction: column; gap: 8px; }
+.msg { border: 1px solid var(--line); border-radius: 8px; padding: 9px 11px; font-size: 13.5px; }
+.msg.in { border-left: 3px solid var(--warn); } .msg.out { border-left: 3px solid var(--line); color: var(--muted); }
+.msg .meta { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--muted); margin-bottom: 3px; } .msg .meta b { color: var(--fg); }
+.msg .text { white-space: pre-wrap; }
+.empty { color: var(--muted); font-size: 13.5px; font-style: italic; }
+.controls { display: grid; gap: 8px; margin-top: 12px; }
+.controls label { font-size: 12px; font-weight: 500; color: var(--muted); display: block; margin-bottom: 3px; }
+.controls select, .controls textarea, .controls input { width: 100%; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 7px 9px; }
+.controls textarea { min-height: 64px; resize: vertical; }
+.row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; } @media (max-width: 500px) { .row2 { grid-template-columns: 1fr; } }
+.addreply { display: none; } .addreply.open { display: grid; gap: 8px; }
+.saved { font-size: 12px; color: var(--good); min-height: 16px; }
+.pricehist { font-size: 12.5px; color: var(--muted); }
+
+.compare { margin-top: 8px; }
+.compare h2 { font-size: 20px; margin-bottom: 10px; }
+.tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow); }
+table { border-collapse: collapse; width: 100%; font-size: 13px; min-width: 900px; }
+th, td { padding: 8px 11px; text-align: left; border-bottom: 1px solid var(--line); white-space: nowrap; }
+th { font-size: 12px; color: var(--muted); font-weight: 600; background: var(--surface-2); cursor: pointer; user-select: none; }
+th.sorted { color: var(--fg); }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+tr:last-child td { border-bottom: 0; }
+.sc { font-weight: 600; font-family: var(--display); }
+.howto { margin-top: 20px; font-size: 13px; color: var(--muted); max-width: 72ch; }
+.card { scroll-margin-top: 64px; }
+.kpi { min-width: 0; }
+
+/* Phone layout (iPhone 13: 390px, 16 Pro Max: 430px): filters collapse behind a button, map and chart become tabs, rows stack. */
+.mbar { display: none; }
+@media (max-width: 760px) {
+  body { padding-inline: 12px; font-size: 14px; }
+  header.top { padding-block: 14px 10px; gap: 8px; }
+  header.top h1 { font-size: 23px; }
+  header.top .sub { font-size: 12.5px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  header.top > div:first-child { min-width: 0; width: 100%; }
+  .hright { gap: 6px; flex-wrap: nowrap; }
+  .hright .chip { padding: 5px 9px; white-space: nowrap; }
+  .jumpnav { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin-inline: -12px; padding-inline: 12px; scroll-padding-inline: 12px; }
+  .jumpnav::-webkit-scrollbar { display: none; }
+  .jumpnav a { white-space: nowrap; flex: none; }
+  .ring.est .n { font-size: 12.5px; }
+  .hright { width: 100%; justify-content: space-between; }
+  .lang button { padding: 6px 9px; font-size: 12px; }
+  .mbar { display: flex; gap: 8px; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 1200; background: var(--bg); padding: 8px 0; margin-bottom: 4px; }
+  .mbar .chip { padding: 8px 12px; font-size: 13px; font-weight: 600; }
+  .tabs { display: inline-flex; border: 1px solid var(--line); border-radius: 7px; overflow: hidden; }
+  .tabs button { background: var(--surface); border: 0; padding: 7px 12px; font-size: 12.5px; font-weight: 600; cursor: pointer; color: var(--muted); }
+  .tabs button + button { border-left: 1px solid var(--line); }
+  .tabs button[aria-selected="true"] { background: var(--accent); color: var(--accent-fg); }
+  .layout { gap: 12px; }
+  aside.filters { display: none; }
+  body.filters-open aside.filters { display: grid; }
+  .main { gap: 12px; }
+  .kpis { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .kpi:nth-child(n+4) { display: none; }
+  .kpi { padding: 10px 12px; } .kpi .v { font-size: 20px; } .kpi .s { font-size: 12px; }
+  .panels { grid-template-columns: 1fr; }
+  .panels[data-tab="map"] .panel.chart, .panels[data-tab="chart"] .panel:not(.chart) { display: none; }
+  #map { height: 300px; } .chart svg { height: 300px; }
+  .panel { padding: 10px; }
+  .listhead h2, .compare h2, .decision h2 { font-size: 18px; }
+  .row { grid-template-columns: 92px 1fr; gap: 10px; padding: 10px; }
+  .row .thumb { width: 92px; }
+  .rowmain h2 { font-size: 15.5px; }
+  .rowmain .line2 { white-space: normal; font-size: 12.5px; }
+  .fact { font-size: 12px; padding: 3px 7px; } .fact.price { font-size: 13.5px; }
+  .eq span { font-size: 10.5px; }
+  .rowside { grid-column: 1 / -1; grid-template-columns: auto 1fr auto; justify-items: start; }
+  .ring { grid-row: auto; width: 44px; height: 44px; } .ring svg { width: 44px; height: 44px; } .ring .n { font-size: 14px; }
+  .dfacts, .col { padding: 12px; }
+  .travel { grid-template-columns: 1fr 1fr; }
+  .specs { grid-template-columns: 1fr; }
+  .bars { grid-template-columns: max-content 1fr max-content; font-size: 12px; }
+  .updates li { flex-wrap: wrap; }
+  .howto { font-size: 12.5px; }
+}
+@media (prefers-reduced-motion: no-preference) { .photos .thumbs img { transition: opacity .15s; } }
+[hidden] { display: none !important; }
+/* Dialogs (wizard, Settings, Add a car): pinned near the top, scrolling body, button bar always at the bottom. */
+dialog.sx { border: 1px solid var(--line); border-radius: var(--radius); padding: 0; margin: 6vh auto auto; max-width: 720px; width: calc(100% - 32px); max-height: 88vh; background: var(--surface); color: var(--fg); box-shadow: 0 12px 40px rgba(16, 24, 40, .18); overflow: hidden; }
+dialog.sx::backdrop { background: rgba(0, 0, 0, .35); }
+.sx form { display: flex; flex-direction: column; max-height: 88vh; }
+.sx .sxhead { padding: 18px 20px 12px; border-bottom: 1px solid var(--line); display: grid; gap: 12px; }
+.sx .sxbody { padding: 16px 20px; display: grid; gap: 14px; align-content: start; overflow-y: auto; max-height: 70vh; min-height: 0; flex: 1 1 auto; overscroll-behavior: contain; }
+.sx.wiz .sxbody { height: 62vh; }
+.sx .sxfoot { padding: 10px 20px 16px; border-top: 1px solid var(--line); display: grid; gap: 8px; }
+.sx .sxfoot .err:empty { display: none; }
+.sx h2 { margin: 0; font-size: 20px; } .sx h3 { font-size: 15px; }
+.sx fieldset { border: 0; padding: 0; margin: 0; display: grid; gap: 12px; min-width: 0; }
+.sx legend { padding: 0; margin-bottom: 6px; font-size: 14px; font-weight: 600; }
+.sx label { display: grid; gap: 4px; font-size: 14px; }
+.sx .fld { display: grid; gap: 4px; font-size: 14px; }
+.sx .opts { display: flex; flex-wrap: wrap; gap: 6px 14px; }
+.sx .opts label { display: flex; gap: 6px; align-items: center; }
+.sx input[type=checkbox], .sx input[type=radio], .sx input[type=range] { accent-color: var(--accent); }
+.sx input[type=text], .sx input[type=number], .sx input[type=url], .sx select, .sx textarea { padding: 8px 10px; min-height: 40px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--fg); width: 100%; min-width: 0; }
+.sx .frow { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; align-items: end; }
+.sx .addr { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
+.sx .grp { display: grid; gap: 10px; }
+.sx .sub { display: grid; gap: 10px; padding-left: 12px; border-left: 2px solid var(--line); }
+.sx .intro { margin: 0; color: var(--fg); background: var(--surface-2); border-radius: 8px; padding: 10px 12px; font-size: 14px; }
+.sx .weight .wl { display: flex; justify-content: space-between; gap: 8px; }
+.sx .weight .wv { font-weight: 600; font-variant-numeric: tabular-nums; min-width: 2.5ch; text-align: right; }
+.sx .bar { display: flex; align-items: center; gap: 8px; }
+.sx .bar > span { flex: 1; }
+.sx button { height: 40px; padding: 0 18px; border-radius: 999px; border: 1px solid var(--accent); background: transparent; color: var(--accent); font-weight: 600; font-size: 14px; cursor: pointer; white-space: nowrap; }
+.sx button:hover { background: var(--info-bg); }
+.sx button.primary { background: var(--accent); color: var(--accent-fg); }
+.sx button.primary:hover { filter: brightness(1.08); background: var(--accent); }
+.sx button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; box-shadow: 0 0 0 4px var(--info-bg); }
+.sx button:disabled { opacity: .5; cursor: not-allowed; filter: none; }
+.sx .stepper { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; counter-reset: none; }
+.sx .stepper li { display: grid; justify-items: center; gap: 4px; text-align: center; font-size: 11.5px; line-height: 1.25; color: var(--muted); position: relative; }
+.sx .stepper li + li::before { content: ""; position: absolute; top: 11px; right: calc(50% + 14px); width: calc(100% - 22px); height: 2px; background: var(--line); }
+.sx .stepper li.done + li::before { background: var(--accent); }
+.sx .stepper .dot { width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; font-size: 12px; border: 2px solid var(--line); background: var(--surface); color: var(--muted); }
+.sx .stepper li.done .dot { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+.sx .stepper li.cur { color: var(--accent); }
+.sx .stepper .nm { height: 2.5em; overflow: hidden; }
+.sx .stepper li.cur .dot { border-color: var(--accent); color: var(--accent); }
+@media (max-width: 560px) { .sx .stepper .nm { display: none; } .sx .sxhead, .sx .sxbody, .sx .sxfoot { padding-inline: 14px; } .sx button { padding: 0 14px; } }
+.sx .err { color: var(--bad); font-size: 14px; white-space: pre-line; margin: 0; } .sx .hint { color: var(--muted); font-size: 13px; margin: 0; }
+body.setup .wrap{display:none}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1 id="apptitle">Car Hunt</h1>
+      <div class="sub" id="sub"></div>
+    </div>
+    <div class="hright">
+      <button class="chip" id="addcar" type="button"></button>
+      <button class="chip" id="settings" type="button"></button>
+      <button class="newpill" id="newpill" type="button" hidden></button>
+      <div class="lang" role="group" aria-label="Language">
+        <button type="button" data-lang="en">EN</button><button type="button" data-lang="de">DE</button><button type="button" data-lang="pt">PT-BR</button>
+      </div>
+    </div>
+  </header>
+
+
+  <div class="mbar" id="mbar">
+    <button type="button" id="fbtn" class="chip"></button>
+    <div class="tabs" role="tablist"><button type="button" data-tab="map" role="tab"></button><button type="button" data-tab="chart" role="tab"></button></div>
+  </div>
+
+  <div class="layout">
+    <aside class="filters" id="filters"></aside>
+    <div class="main">
+      <nav class="jumpnav" id="jumpnav" aria-label="Page sections"></nav>
+      <section class="welcome" id="welcome" hidden></section>
+      <div class="kpis" id="kpis"></div>
+      <section class="decision visit" id="visit" hidden></section>
+      <section class="decision" id="decision"></section>
+      <div class="updates" id="updates" hidden></div>
+      <div class="listhead" id="listings"><h2 id="listtitle"></h2><div class="actions"><span class="muted" id="count"></span></div></div>
+      <div class="cards" id="cards"><p class="empty" id="loading"></p></div>
+      <section class="costs" id="costs"></section>
+      <div class="panels" id="explore">
+        <div class="panel"><h3 id="maptitle"></h3><div id="map"></div><div class="legend" id="maplegend"></div></div>
+        <div class="panel chart"><h3 id="charttitle"></h3><div id="chart"></div><div class="legend" id="chartlegend"></div></div>
+      </div>
+      <section class="compare" id="compare"><h2 id="cmptitle"></h2><div class="tablewrap"><table id="cmp"></table></div></section>
+      <p class="howto" id="howto"></p>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="criteria.js"></script>
+<script src="setup.js"></script>
+<script>
+(function () {
+  let P = null, CAT = [];
+  const HOME = () => (P && P.home) || { lat: 51.1657, lon: 10.4515, label: "" };
+  // Home as stored; long geocoder-style labels are cut to their first two comma-separated parts.
+  const homeShort = () => { const l = String(HOME().label || "").trim(); return l.length > 40 ? l.split(",").map(x => x.trim()).filter(Boolean).slice(0, 2).join(", ") : l; };
+  const I18N = {
+    en: { locale: "en-GB",
+      sub: (n, d, h) => `${n} ${n === 1 ? "car" : "cars"} tracked${d ? " · last listing check " + d : ""}${h ? " · from " + h : ""}`,
+      newSince: n => `${n} new since your last visit`, allSeen: "Mark all as seen",
+      status: { candidate: "Not contacted", contacted: "Contacted", replied: "Replied", call: "Call seller", viewing: "Viewing planned", declined: "Seller declined", dropped: "Dropped", bought: "Bought" },
+      fModel: "Model", eqMaybe: "Not listed, but usually fitted on this model year. Confirm with the seller.",
+      kmYear: "km/yr", usageHigh: "motorway", usageLow: "lower use", kmYearTip: "Average distance per year since first registration. This alone does not show whether trips were long or short; ask about the car's use.",
+      fStatus: "Status", fLimits: "Limits", fMust: "Must have", fShow: "Show", fSort: "Sort by", reset: "Reset filters", fBtn: n => "Filters" + (n ? " · " + n : ""), fClose: "Hide filters", tabMap: "Map", tabChart: "Chart",
+      maxPrice: "Max price", maxKm: "Max mileage", maxDrive: "Max transit time (one way)", maxDriveCar: "Max driving time (one way)", driveNote: "Driving times by car from home, from OpenStreetMap routing; traffic not included.", tripUnknown: "Travel time unknown", sortDriveCar: "Driving time", colDriveCar: "Drive", min: "min", transit: "by public transport", transitUnknown: "Transit time unverified", transitApprox: "to listing area; confirm seller address", transitLong: "Long trip", includeUnverified: "Show cars with unverified journey time", transitNote: "Times include walking and transfers from home. Based on a weekday journey to the listing area; check the exact seller address and departure before visiting.",
+      needCarplay: "CarPlay", needCam: "Rear camera", needAcc: "Adaptive cruise (ACC)", inCriteria: "Only cars that match my criteria", dealerOnly: "Dealer only (legal warranty)", hideGone: "Hide sold / gone",
+      sortOpts: { rec: "Recommendation", score: "Score", reply: "Seller reply", price: "Price", km: "Mileage", year: "Year (newest)", drive: "Transit time", value: "Value (score per €1,000)" },
+      kpiMatch: "cars match", kpiBest: "best score", kpiCheap: "cheapest", kpiNear: "nearest", kpiMedian: "median price",
+      map: "Where they are", chart: "Price vs mileage, coloured by score", budgetLine: "budget", stretchLine: "stretch",
+      scoreHigh: "≥ 70 good", scoreMid: "55–69 fair", scoreLow: "< 55 weak", home: "Home",
+      list: "Ranked list", car: "car", cars: "cars", loading: "Loading…", noMatch: "No car matches these filters.", loadFail: "Could not load the cars.",
+      updates: "Latest changes", upNew: "new", upPrice: "price", upGone: "gone", upBack: "back",
+      drive: "drive", byCar: "by car", roadKm: "road", train: "Train connection", route: "Route", listing: "Listing", copy: "Copy number", copied: "Copied", phone: "Phone",
+      hp: "hp", neg: "neg.", owners: o => o == null ? "owners ?" : o + (o === 1 ? " owner" : " owners"), hu: "HU", gone: "Listing gone", newBadge: "NEW",
+      eq: { carplay: "CarPlay", camera: "Camera", acc: "ACC", ahk: "Tow hitch", led: "LED/Xenon", pano: "Panorama", navi: "Navi", seatheat: "Heated seats", leather: "Leather", massage: "Massage", wireless: "Wireless charging", keyless: "Keyless", lane: "Lane assist", parkassist: "Park assist", standheizung: "Parking heater", digital: "Digital cockpit", blindspot: "Blind spot" },
+      specs: { engine: "Engine", dsgType: "Gearbox", hu: "Inspection (HU)", owners: "Owners", serviceHistory: "Service history", timingBelt: "Timing belt", dsgOil: "Gearbox oil", carplay: "CarPlay", camera: "Rear camera", colour: "Colour" },
+      take: "Assessment", docsReview: "From the listing photos", questions: "Questions to clarify", conv: "Conversation", noMsgs: "No messages yet.",
+      rating: { km: "Mileage & age", docs: "Maintenance records", gearbox: "Gearbox risk", seller: "Seller & warranty", price: "Price", distance: "Visit by transit", distanceCar: "Distance by car", equip: "Equipment" },
+      statusL: "Status", next: "Next step", nextPh: "e.g. call after 13:00", notes: "My notes", notesPh: "Impressions, offers, things to check at the viewing…",
+      logReply: "Log a reply", cancel: "Cancel", fromL: "From", via: "Via", vias: ["Phone", "mobile.de", "Email", "WhatsApp", "In person"], said: "What they said", add: "Add to conversation",
+      editCar: "Edit details", deleteCar: "Delete car", confirmDelete: t => `Delete “${t}”? This removes the car, its notes and messages, and cannot be undone.`, saved: "Saved", saveFail: "Could not save", pick: "Shortlist", picked: "Shortlisted", priceHist: "Price history",
+      cmp: "Side by side", cols: ["Car", "Score", "Price", "km", "km/yr", "Year", "hp", "Gearbox", "Transit", "Seller", "Belt", "CarPlay", "Camera", "Status"] },
+    de: { locale: "de-DE",
+      sub: (n, d, h) => `${n} ${n === 1 ? "Auto" : "Autos"} im Blick${d ? " · letzte Inseratsprüfung " + d : ""}${h ? " · ab " + h : ""}`,
+      newSince: n => `${n} neu seit deinem letzten Besuch`, allSeen: "Alle als gesehen markieren",
+      status: { candidate: "Noch nicht angefragt", contacted: "Angefragt", replied: "Antwort da", call: "Anrufen", viewing: "Besichtigung geplant", declined: "Verkäufer lehnt ab", dropped: "Gestrichen", bought: "Gekauft" },
+      fModel: "Modell", eqMaybe: "Nicht angegeben, in diesem Modelljahr aber meist verbaut. Beim Verkäufer bestätigen.",
+      kmYear: "km/Jahr", usageHigh: "Langstrecke", usageLow: "weniger gefahren", kmYearTip: "Durchschnittliche Jahresfahrleistung seit Erstzulassung. Daraus lässt sich nicht erkennen, ob Lang- oder Kurzstrecken gefahren wurden; beim Verkäufer nachfragen.",
+      fStatus: "Status", fLimits: "Grenzen", fMust: "Muss haben", fShow: "Anzeigen", fSort: "Sortieren nach", reset: "Filter zurücksetzen", fBtn: n => "Filter" + (n ? " · " + n : ""), fClose: "Filter ausblenden", tabMap: "Karte", tabChart: "Diagramm",
+      maxPrice: "Max. Preis", maxKm: "Max. Kilometer", maxDrive: "Max. ÖPNV-Fahrzeit (einfach)", maxDriveCar: "Max. Fahrzeit mit dem Auto (einfach)", driveNote: "Fahrzeiten mit dem Auto ab Zuhause, berechnet mit OpenStreetMap-Routing; ohne Verkehr.", tripUnknown: "Fahrzeit unbekannt", sortDriveCar: "Fahrzeit", colDriveCar: "Fahrzeit", min: "Min.", transit: "mit Bus & Bahn", transitUnknown: "ÖPNV-Zeit ungeprüft", transitApprox: "bis zum Inseratsgebiet; Verkäuferadresse prüfen", transitLong: "Lange Anfahrt", includeUnverified: "Autos mit ungeprüfter Anfahrt zeigen", transitNote: "Die Zeiten enthalten Fußwege und Umstiege ab Zuhause. Grundlage ist eine Werktagsverbindung bis zum Inseratsgebiet. Vor dem Besuch die genaue Verkäuferadresse und Abfahrt prüfen.",
+      needCarplay: "CarPlay", needCam: "Rückfahrkamera", needAcc: "Abstandstempomat (ACC)", inCriteria: "Nur Autos, die zu meinen Kriterien passen", dealerOnly: "Nur Händler (Gewährleistung)", hideGone: "Verkaufte ausblenden",
+      sortOpts: { rec: "Empfehlung", score: "Punkte", reply: "Verkäuferantwort", price: "Preis", km: "Kilometer", year: "Baujahr (neueste)", drive: "ÖPNV-Fahrzeit", value: "Preis-Leistung (Punkte je 1.000 €)" },
+      kpiMatch: "Autos passen", kpiBest: "beste Wertung", kpiCheap: "günstigstes", kpiNear: "nächstes", kpiMedian: "Median-Preis",
+      map: "Wo sie stehen", chart: "Preis vs. Kilometer, Farbe = Punkte", budgetLine: "Budget", stretchLine: "Schmerzgrenze",
+      scoreHigh: "≥ 70 gut", scoreMid: "55–69 okay", scoreLow: "< 55 schwach", home: "Zuhause",
+      list: "Rangliste", car: "Auto", cars: "Autos", loading: "Lädt…", noMatch: "Kein Auto passt zu diesen Filtern.", loadFail: "Autos konnten nicht geladen werden.",
+      updates: "Letzte Änderungen", upNew: "neu", upPrice: "Preis", upGone: "weg", upBack: "wieder da",
+      drive: "Fahrt", byCar: "mit dem Auto", roadKm: "Straße", train: "Bahnverbindung", route: "Route", listing: "Inserat", copy: "Nummer kopieren", copied: "Kopiert", phone: "Telefon",
+      hp: "PS", neg: "VB", owners: o => o == null ? "Halter ?" : o + " Halter", hu: "HU", gone: "Inserat weg", newBadge: "NEU",
+      eq: { carplay: "CarPlay", camera: "Kamera", acc: "ACC", ahk: "AHK", led: "LED/Xenon", pano: "Panorama", navi: "Navi", seatheat: "Sitzheizung", leather: "Leder", massage: "Massage", wireless: "Kabellos laden", keyless: "Keyless", lane: "Spurassistent", parkassist: "Parkassistent", standheizung: "Standheizung", digital: "Digital Cockpit", blindspot: "Totwinkel" },
+      specs: { engine: "Motor", dsgType: "Getriebe", hu: "HU/TÜV", owners: "Halter", serviceHistory: "Scheckheft", timingBelt: "Zahnriemen", dsgOil: "Getriebeöl", carplay: "CarPlay", camera: "Rückfahrkamera", colour: "Farbe" },
+      take: "Einschätzung", docsReview: "Aus den Inseratsfotos", questions: "Zu klärende Fragen", conv: "Verlauf", noMsgs: "Noch keine Nachrichten.",
+      rating: { km: "Laufleistung & Alter", docs: "Wartungsnachweise", gearbox: "Getrieberisiko", seller: "Verkäufer & Gewährleistung", price: "Preis", distance: "Besuch mit ÖPNV", distanceCar: "Entfernung mit dem Auto", equip: "Ausstattung" },
+      statusL: "Status", next: "Nächster Schritt", nextPh: "z. B. ab 13 Uhr anrufen", notes: "Meine Notizen", notesPh: "Eindrücke, Angebote, was bei der Besichtigung zu prüfen ist…",
+      logReply: "Antwort eintragen", cancel: "Abbrechen", fromL: "Von", via: "Über", vias: ["Telefon", "mobile.de", "E-Mail", "WhatsApp", "Persönlich"], said: "Was gesagt wurde", add: "Zum Verlauf hinzufügen",
+      editCar: "Angaben bearbeiten", deleteCar: "Auto löschen", confirmDelete: t => `„${t}“ löschen? Das entfernt das Auto, seine Notizen und Nachrichten und lässt sich nicht rückgängig machen.`, saved: "Gespeichert", saveFail: "Speichern fehlgeschlagen", pick: "Vormerken", picked: "Vorgemerkt", priceHist: "Preisverlauf",
+      cmp: "Im Vergleich", cols: ["Auto", "Punkte", "Preis", "km", "km/Jahr", "Baujahr", "PS", "Getriebe", "ÖPNV", "Verkäufer", "Zahnriemen", "CarPlay", "Kamera", "Status"] },
+    pt: { locale: "pt-BR",
+      sub: (n, d, h) => `${n} ${n === 1 ? "carro acompanhado" : "carros acompanhados"}${d ? " · última verificação dos anúncios " + d : ""}${h ? " · a partir de " + h : ""}`,
+      newSince: n => `${n} novos desde sua última visita`, allSeen: "Marcar todos como vistos",
+      status: { candidate: "Não contatado", contacted: "Contatado", replied: "Respondeu", call: "Ligar", viewing: "Visita marcada", declined: "Vendedor recusou", dropped: "Descartado", bought: "Comprado" },
+      fModel: "Modelo", eqMaybe: "Não listado, mas geralmente presente neste ano-modelo. Confirme com o vendedor.",
+      kmYear: "km/ano", usageHigh: "rodovia", usageLow: "menos uso", kmYearTip: "Distância média por ano desde o primeiro emplacamento. Isso não mostra se os trajetos foram longos ou curtos; pergunte ao vendedor.",
+      fStatus: "Status", fLimits: "Limites", fMust: "Obrigatório", fShow: "Mostrar", fSort: "Ordenar por", reset: "Limpar filtros", fBtn: n => "Filtros" + (n ? " · " + n : ""), fClose: "Ocultar filtros", tabMap: "Mapa", tabChart: "Gráfico",
+      maxPrice: "Preço máx.", maxKm: "Km máx.", maxDrive: "Tempo máx. transporte público (ida)", maxDriveCar: "Tempo máx. de carro (ida)", driveNote: "Tempos de carro desde casa, calculados com roteamento do OpenStreetMap; sem trânsito.", tripUnknown: "Tempo de viagem desconhecido", sortDriveCar: "Tempo de carro", colDriveCar: "Carro", min: "min", transit: "de transporte público", transitUnknown: "Tempo não verificado", transitApprox: "até a área do anúncio; confirmar endereço", transitLong: "Viagem longa", includeUnverified: "Mostrar carros com viagem não verificada", transitNote: "Os tempos incluem caminhada e baldeações desde casa. Baseados em dia útil até a área do anúncio; confira o endereço exato e o horário antes da visita.",
+      needCarplay: "CarPlay", needCam: "Câmera de ré", needAcc: "Piloto adaptativo (ACC)", inCriteria: "Só carros dentro dos meus critérios", dealerOnly: "Só lojas (garantia legal)", hideGone: "Ocultar vendidos",
+      sortOpts: { rec: "Recomendação", score: "Pontuação", reply: "Resposta do vendedor", price: "Preço", km: "Quilometragem", year: "Ano (mais novo)", drive: "Transporte público", value: "Custo-benefício (pontos por € 1.000)" },
+      kpiMatch: "carros no filtro", kpiBest: "melhor pontuação", kpiCheap: "mais barato", kpiNear: "mais perto", kpiMedian: "preço mediano",
+      map: "Onde estão", chart: "Preço vs. km, cor = pontuação", budgetLine: "orçamento", stretchLine: "limite",
+      scoreHigh: "≥ 70 bom", scoreMid: "55–69 razoável", scoreLow: "< 55 fraco", home: "Casa",
+      list: "Ranking", car: "carro", cars: "carros", loading: "Carregando…", noMatch: "Nenhum carro corresponde a esses filtros.", loadFail: "Não foi possível carregar os carros.",
+      updates: "Últimas mudanças", upNew: "novo", upPrice: "preço", upGone: "saiu", upBack: "voltou",
+      drive: "viagem", byCar: "de carro", roadKm: "estrada", train: "Conexão de trem", route: "Rota", listing: "Anúncio", copy: "Copiar número", copied: "Copiado", phone: "Telefone",
+      hp: "cv", neg: "negociável", owners: o => o == null ? "donos ?" : o + (o === 1 ? " dono" : " donos"), hu: "Inspeção", gone: "Anúncio saiu", newBadge: "NOVO",
+      eq: { carplay: "CarPlay", camera: "Câmera", acc: "ACC", ahk: "Engate", led: "LED/Xenon", pano: "Teto pan.", navi: "GPS", seatheat: "Bancos aquec.", leather: "Couro", massage: "Massagem", wireless: "Carregador s/ fio", keyless: "Keyless", lane: "Assist. faixa", parkassist: "Assist. estac.", standheizung: "Aquecedor", digital: "Painel digital", blindspot: "Ponto cego" },
+      specs: { engine: "Motor", dsgType: "Câmbio", hu: "Inspeção (HU)", owners: "Donos", serviceHistory: "Histórico de revisões", timingBelt: "Correia dentada", dsgOil: "Óleo do câmbio", carplay: "CarPlay", camera: "Câmera de ré", colour: "Cor" },
+      take: "Avaliação", docsReview: "Das fotos do anúncio", questions: "Perguntas a esclarecer", conv: "Conversa", noMsgs: "Nenhuma mensagem ainda.",
+      rating: { km: "Quilometragem e idade", docs: "Histórico de manutenção", gearbox: "Risco do câmbio", seller: "Vendedor e garantia", price: "Preço", distance: "Visita de transporte público", distanceCar: "Distância de carro", equip: "Equipamentos" },
+      statusL: "Status", next: "Próximo passo", nextPh: "ex.: ligar depois das 13h", notes: "Minhas anotações", notesPh: "Impressões, ofertas, o que verificar na visita…",
+      logReply: "Registrar resposta", cancel: "Cancelar", fromL: "De", via: "Por", vias: ["Telefone", "mobile.de", "E-mail", "WhatsApp", "Pessoalmente"], said: "O que disseram", add: "Adicionar à conversa",
+      editCar: "Editar dados", deleteCar: "Excluir carro", confirmDelete: t => `Excluir “${t}”? Isso remove o carro, suas anotações e mensagens, e não pode ser desfeito.`, saved: "Salvo", saveFail: "Não foi possível salvar", pick: "Salvar", picked: "Salvo", priceHist: "Histórico de preço",
+      cmp: "Lado a lado", cols: ["Carro", "Pontos", "Preço", "km", "km/ano", "Ano", "cv", "Câmbio", "Viagem", "Vendedor", "Correia", "CarPlay", "Câmera", "Status"] }
+  };
+  const COST_I18N = {
+    en: { title: "What will each car cost?", intro: "Planning estimate. Choose up to six cars and adjust the assumptions.", km: "km/year", apr: "Loan APR %", insurance: "Insurance €/year", upkeep: "Service + repair reserve €/year", fixed: "Tax + HU €/year", fuel: "Fuel", fees: "Insurance + tax + HU", repair: "Service + repairs", loan: "Loan", year: "/year", month: "/month", use: "Fuel use", note: (n, down) => `Bars show yearly cash outflow, including ${n} monthly loan payments with ${down} down and no balloon. Fuel use is an editable planning estimate, not a measurement of this car. Insurance, tax and repairs vary by driver and vehicle; obtain quotes and inspect service records. Depreciation and resale value are excluded.`, noteNoLoan: "Bars show yearly cash outflow. Fuel use is an editable planning estimate, not a measurement of this car. Insurance, tax and repairs vary by driver and vehicle; obtain quotes and inspect service records. Depreciation and resale value are excluded.", pick: "Cars to compare" },
+    de: { title: "Was kostet jedes Auto?", intro: "Planungsrechnung. Bis zu sechs Autos auswählen und Annahmen anpassen.", km: "km/Jahr", apr: "Kreditzins %", insurance: "Versicherung €/Jahr", upkeep: "Wartung + Reparaturreserve €/Jahr", fixed: "Steuer + HU €/Jahr", fuel: "Kraftstoff", fees: "Versicherung + Steuer + HU", repair: "Wartung + Reparaturen", loan: "Kredit", year: "/Jahr", month: "/Monat", use: "Verbrauch", note: (n, down) => `Die Balken zeigen jährliche Ausgaben inklusive ${n} Kreditraten mit ${down} Anzahlung und ohne Schlussrate. Der Verbrauch ist eine änderbare Planungsannahme, kein Messwert dieses Autos. Versicherung, Steuer und Reparaturen hängen von Fahrer und Fahrzeug ab; Angebote einholen und Wartungsbelege prüfen. Wertverlust und Wiederverkauf sind nicht enthalten.`, noteNoLoan: "Die Balken zeigen jährliche Ausgaben. Der Verbrauch ist eine änderbare Planungsannahme, kein Messwert dieses Autos. Versicherung, Steuer und Reparaturen hängen von Fahrer und Fahrzeug ab; Angebote einholen und Wartungsbelege prüfen. Wertverlust und Wiederverkauf sind nicht enthalten.", pick: "Autos vergleichen" },
+    pt: { title: "Quanto custa cada carro?", intro: "Estimativa de planejamento. Escolha até seis carros e ajuste as premissas.", km: "km/ano", apr: "Juros anuais %", insurance: "Seguro €/ano", upkeep: "Revisões + reserva para reparos €/ano", fixed: "Imposto + inspeção €/ano", fuel: "Combustível", fees: "Seguro + imposto + inspeção", repair: "Revisões + reparos", loan: "Financiamento", year: "/ano", month: "/mês", use: "Consumo", note: (n, down) => `As barras mostram os gastos anuais, incluindo ${n} parcelas com entrada de ${down} e sem parcela final. O consumo é uma estimativa ajustável, não uma medição deste carro. Seguro, imposto e reparos variam; peça cotações e confira o histórico de manutenção. Depreciação e revenda não estão incluídas.`, noteNoLoan: "As barras mostram os gastos anuais. O consumo é uma estimativa ajustável, não uma medição deste carro. Seguro, imposto e reparos variam; peça cotações e confira o histórico de manutenção. Depreciação e revenda não estão incluídas.", pick: "Carros para comparar" }
+  };
+  const UX = {
+    en: { visitTitle: "Replied and worth a visit", visitHint: "Sellers who answered and whose car is worth seeing, in order.", visitNext: "Next", nav: { visit: "Visit", decision: "Focus", listings: "Listings", costs: "Costs", explore: "Map & chart", compare: "Compare" }, focus: "Cars worth a closer look", focusHint: "Shortlisted cars first, then the highest rated available listings. Scores summarize evidence; check the documents before deciding.", loan: "loan/month", loanLimit: cap => `${cap} loan limit`, maxPriceLine: "max price", score: "score", reply: "Seller reply", replyHint: "Answers and inspection access; seller claims are not yet verified.", compare: "Compare costs", comparing: "In cost comparison", shortlist: "Shortlist", shortlisted: "Shortlisted", search: "Search car, city or seller", savedOnly: "Shortlist only", affordable: cap => `Loan ≤ ${cap}/month`, more: "Show 12 more", all: "All shown", cmp: "Selected cars side by side", howto: "Scores combine the ratings you weight in Settings: mileage and age, maintenance records, gearbox, seller and warranty, price, distance and equipment. Filters, map and chart work together: narrow the list, click a marker or dot to open that car. Shortlisting a car does not contact anyone.", noFocus: "No available cars match your filters.", details: "Open details",
+      outside: "Outside your criteria", estTip: "Estimated from price, mileage, distance and equipment",
+      welcomeTitle: "No cars yet", welcomeText: "Add a listing you like and Car Hunt ranks it against your criteria, or let the optional Claude routine find and check listings for you.", welcomeRoutine: "Automate it with the Claude routine",
+      fuels: { diesel: "Diesel", petrol: "Petrol", hybrid: "Hybrid", plugin: "Plug-in hybrid", electric: "Electric", lpg: "LPG" }, gearboxes: { automatic: "Automatic", manual: "Manual" },
+      crit: { fuel: v => `Fuel: ${v}`, gearbox: v => `Gearbox: ${v}`, make: v => `Make: ${v}`, price: v => `Price ${v}`, km: v => `Mileage ${v}`, year: v => `Year ${v}`, hp: v => `${v} hp`, drive: v => `${v} min away`, equip: v => `Missing: ${v}`, avoid: v => v } },
+    de: { visitTitle: "Geantwortet und eine Besichtigung wert", visitHint: "Verkäufer, die geantwortet haben und deren Auto sich anzusehen lohnt, in Reihenfolge.", visitNext: "Nächster Schritt", nav: { visit: "Besichtigen", decision: "Im Fokus", listings: "Inserate", costs: "Kosten", explore: "Karte & Diagramm", compare: "Vergleich" }, focus: "Autos für die engere Auswahl", focusHint: "Zuerst vorgemerkte Autos, dann die bestbewerteten verfügbaren Inserate. Punkte fassen Belege zusammen; Unterlagen vor der Entscheidung prüfen.", loan: "Kredit/Monat", loanLimit: cap => `${cap} Kreditlimit`, maxPriceLine: "Höchstpreis", score: "Punkte", reply: "Verkäuferantwort", replyHint: "Antworten und unabhängige Prüfung; Verkäuferaussagen sind noch nicht belegt.", compare: "Kosten vergleichen", comparing: "Im Kostenvergleich", shortlist: "Vormerken", shortlisted: "Vorgemerkt", search: "Auto, Ort oder Verkäufer suchen", savedOnly: "Nur vorgemerkte", affordable: cap => `Kredit ≤ ${cap}/Monat`, more: "12 weitere zeigen", all: "Alle angezeigt", cmp: "Ausgewählte Autos im Vergleich", howto: "Die Punkte kombinieren die Bewertungen, die du in den Einstellungen gewichtest: Laufleistung und Alter, Wartungsnachweise, Getriebe, Verkäufer und Gewährleistung, Preis, Entfernung und Ausstattung. Filter, Karte und Diagramm arbeiten zusammen: Liste eingrenzen, Marker oder Punkt anklicken, Auto öffnet sich. Vormerken schreibt niemanden an.", noFocus: "Keine verfügbaren Autos passen zu den Filtern.", details: "Details öffnen",
+      outside: "Außerhalb deiner Kriterien", estTip: "Geschätzt aus Preis, Kilometerstand, Entfernung und Ausstattung",
+      welcomeTitle: "Noch keine Autos", welcomeText: "Füge ein Inserat hinzu, das dir gefällt, und Car Hunt ordnet es nach deinen Kriterien ein, oder lass die optionale Claude-Routine Inserate für dich finden und prüfen.", welcomeRoutine: "Mit der Claude-Routine automatisieren",
+      fuels: { diesel: "Diesel", petrol: "Benzin", hybrid: "Hybrid", plugin: "Plug-in-Hybrid", electric: "Elektro", lpg: "Autogas" }, gearboxes: { automatic: "Automatik", manual: "Schaltgetriebe" },
+      crit: { fuel: v => `Kraftstoff: ${v}`, gearbox: v => `Getriebe: ${v}`, make: v => `Marke: ${v}`, price: v => `Preis ${v}`, km: v => `Laufleistung ${v}`, year: v => `Baujahr ${v}`, hp: v => `${v} PS`, drive: v => `${v} Min. entfernt`, equip: v => `Fehlt: ${v}`, avoid: v => v } },
+    pt: { visitTitle: "Responderam e valem uma visita", visitHint: "Vendedores que responderam e cujo carro vale a pena ver, em ordem.", visitNext: "Próximo passo", nav: { visit: "Visitar", decision: "Destaques", listings: "Anúncios", costs: "Custos", explore: "Mapa e gráfico", compare: "Comparar" }, focus: "Carros para olhar de perto", focusHint: "Primeiro os salvos, depois os anúncios disponíveis com melhor nota. Confira os documentos antes de decidir.", loan: "crédito/mês", loanLimit: cap => `limite ${cap}/mês`, maxPriceLine: "preço máx.", score: "pontos", reply: "Resposta do vendedor", replyHint: "Respostas e vistoria independente; informações ainda não verificadas.", compare: "Comparar custos", comparing: "Na comparação de custos", shortlist: "Salvar", shortlisted: "Salvo", search: "Buscar carro, cidade ou vendedor", savedOnly: "Só salvos", affordable: cap => `Crédito ≤ ${cap}/mês`, more: "Mostrar mais 12", all: "Todos exibidos", cmp: "Carros escolhidos lado a lado", howto: "A pontuação combina as notas que você pondera nas Configurações: quilometragem e idade, manutenção, câmbio, vendedor e garantia, preço, distância e equipamentos. Filtros, mapa e gráfico trabalham juntos: restrinja a lista, clique num marcador ou ponto para abrir o carro. Salvar um carro não contata ninguém.", noFocus: "Nenhum carro disponível corresponde aos filtros.", details: "Abrir detalhes",
+      outside: "Fora dos seus critérios", estTip: "Estimada a partir de preço, quilometragem, distância e equipamentos",
+      welcomeTitle: "Nenhum carro ainda", welcomeText: "Adicione um anúncio de que você gostou e o Car Hunt o classifica pelos seus critérios, ou deixe a rotina opcional do Claude encontrar e verificar anúncios para você.", welcomeRoutine: "Automatizar com a rotina do Claude",
+      fuels: { diesel: "Diesel", petrol: "Gasolina", hybrid: "Híbrido", plugin: "Híbrido plug-in", electric: "Elétrico", lpg: "GLP" }, gearboxes: { automatic: "Automático", manual: "Manual" },
+      crit: { fuel: v => `Combustível: ${v}`, gearbox: v => `Câmbio: ${v}`, make: v => `Marca: ${v}`, price: v => `Preço ${v}`, km: v => `Quilometragem ${v}`, year: v => `Ano ${v}`, hp: v => `${v} cv`, drive: v => `a ${v} min`, equip: v => `Falta: ${v}`, avoid: v => v } }
+  };
+  const STATUS_RANK = { bought: 0, call: 1, replied: 2, viewing: 3, contacted: 4, candidate: 4, dropped: 8, declined: 9 };
+  const STATUS_ORDER = ["call", "replied", "viewing", "contacted", "candidate", "dropped", "declined", "bought"];
+  const RATING_KEYS = ["km", "docs", "gearbox", "seller", "price", "distance", "equip"];
+  const EQ_KEYS = ["carplay", "camera", "acc", "ahk", "led", "pano", "navi", "seatheat"];
+  const $ = (s, r = document) => r.querySelector(s);
+  const el = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
+  const esc = s => String(s ?? "").replace(/[&<>"]/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[ch]);
+  const critText = r => {
+    const f = UX[lang].crit[r.key];
+    const v = r.key === "price" ? eur(r.value) : r.key === "km" ? km(r.value) : r.key === "equip" ? (T.eq[r.value] || r.value) : r.key === "fuel" ? (UX[lang].fuels[r.value] || r.value) : r.key === "gearbox" ? (UX[lang].gearboxes[r.value] || r.value) : r.key === "avoid" ? (r.def.label[lang] || r.def.label.en) : r.value;
+    return f(v);
+  };
+
+  let lang = "en"; try { const l = localStorage.getItem("carhunt-lang"); if (I18N[l]) lang = l; } catch (e) {}
+  if (I18N[location.hash.slice(1)]) lang = location.hash.slice(1);
+  let T = I18N[lang];
+  const tf = (c, f) => (c.i18n && c.i18n[lang] && c.i18n[lang][f] != null) ? c.i18n[lang][f] : c[f];
+  const eur = n => n == null ? "–" : new Intl.NumberFormat(T.locale, { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(n);
+  const km = n => n == null ? "–" : new Intl.NumberFormat(T.locale).format(n) + " km";
+  const fmtDate = iso => { if (!iso) return ""; const d = new Date(iso); if (isNaN(d)) return iso; return d.toLocaleDateString(T.locale, { day: "2-digit", month: "2-digit", year: "numeric" }) + (iso.length > 10 ? " " + d.toLocaleTimeString(T.locale, { hour: "2-digit", minute: "2-digit" }) : ""); };
+  const scoreColor = s => s == null ? "var(--muted)" : s >= 70 ? "var(--good)" : s >= 55 ? "var(--warn)" : "var(--bad)";
+  const scoreHex = s => s == null ? "#8a97a8" : s >= 70 ? "#1d7a4b" : s >= 55 ? "#c07d13" : "#b4393b";
+
+  let cars = [], meta = { lastCheck: null, log: [] }, api = false, canWrite = true;
+  const expanded = new Set(); if (location.hash.startsWith("#car-")) expanded.add(location.hash.slice(5));
+  const openPhoto = {}, openReply = {};
+  let DEF = {};
+  function defaults() {
+    return { statuses: new Set(), models: new Set(), query: "", savedOnly: false, affordable: false,
+      maxPrice: Math.ceil(P.money.negotiableUpTo * 1.3 / 500) * 500, maxKm: Math.ceil(P.car.maxKm * 1.2 / 5000) * 5000, maxDrive: 600,
+      includeUnverified: true, carplay: false, cam: false, acc: false, inCriteria: true, dealer: false, hideGone: true, sort: "rec" };
+  }
+  let F = {};
+  function initFilters() {
+    DEF = defaults();
+    F = { ...DEF, statuses: new Set(), models: new Set() };
+    try { const s = JSON.parse(localStorage.getItem("carhunt-filters") || "null"); if (s) F = { ...F, ...s, statuses: new Set(s.statuses || []), models: new Set(s.models || []) }; } catch (e) {}
+  }
+  const saveF = () => { try { localStorage.setItem("carhunt-filters", JSON.stringify({ ...F, statuses: [...F.statuses], models: [...F.models] })); } catch (e) {} };
+  const transitMinutes = c => Number.isFinite(+c.transitMin) && +c.transitMin > 0 ? +c.transitMin : null;
+  const transitText = c => transitMinutes(c) ? `~${transitMinutes(c)} ${T.min} ${T.transit}` : T.transitUnknown;
+  const driveMinutes = c => Number.isFinite(+c.driveMin) && +c.driveMin > 0 ? +c.driveMin : null;
+  const tripMin = c => (P && P.distance.preferTransit) ? transitMinutes(c) : driveMinutes(c);
+  const tripText = c => (P && P.distance.preferTransit) ? transitText(c) : (driveMinutes(c) ? `~${driveMinutes(c)} ${T.min} ${T.byCar}` : T.tripUnknown);
+  const transitUrl = c => "https://www.google.com/maps/dir/?api=1&origin=" + encodeURIComponent(HOME().label) + "&destination=" + encodeURIComponent(c.transitDestination || c.location || c.city || "") + "&travelmode=transit";
+  const famOf = c => String(c.model || c.title || "Other").trim().split(/\s+/).slice(0, 2).join(" ");
+  let lastVisit = null; try { lastVisit = localStorage.getItem("carhunt-lastvisit"); } catch (e) {}
+  const isNew = c => lastVisit && c.addedAt && c.addedAt > lastVisit.slice(0, 10);
+  let tableSort = { k: "score", dir: -1 };
+  let filtersOpen = false, panelTab = "map";
+
+  // ---------- filtering & sorting ----------
+  function gearboxLabel(c) {
+    const own = String(c.dsgType || c.gearbox || "").split(/ — |\(/)[0].trim();
+    if (own) return own;
+    const g = Criteria.gearboxOf(c);
+    return g === "manual" ? "Manual" : g === "automatic" ? "Automatic" : "?";
+  }
+  // Average yearly mileage since first registration (today's date as the end point).
+  function kmPerYear(c) { if (!c.km || !c.regYear) return null; const years = (Date.now() - new Date(c.regYear, (c.regMonth || 1) - 1, 1).getTime()) / 31557600000; return years > 0.5 ? c.km / years : null; }
+  function isDealer(c) { return /dealer|händler|concession/i.test(c.sellerType || ""); }
+  function matches(c) {
+    if (F.query && !(String(c.displayTitle || c.title || "") + " " + String(c.model || "") + " " + String(c.city || "") + " " + String(c.sellerName || "")).toLocaleLowerCase().includes(F.query.trim().toLocaleLowerCase())) return false;
+    if (F.savedOnly && !c.pick) return false;
+    if (fin().enabled && F.affordable && (!c.price || loanMonthly(c.price, costPrefs.apr) > loanCap())) return false;
+    if (F.statuses.size && !F.statuses.has(c.status)) return false;
+    if (F.models.size && !F.models.has(famOf(c))) return false;
+    if (c.price > F.maxPrice || c.km > F.maxKm || (tripMin(c) ?? 0) > F.maxDrive || (!tripMin(c) && !F.includeUnverified)) return false;
+    const e = c.equip || {};
+    if (F.carplay && !((e.carplay || 0) >= 0.6)) return false; if (F.cam && !e.camera) return false; if (F.acc && !e.acc) return false;
+    if (F.dealer && !isDealer(c)) return false;
+    if (F.hideGone && (c.gone || ["declined", "dropped"].includes(c.status))) return false;
+    if (F.inCriteria && c._crit.length && c.status !== "bought") return false;
+    return true;
+  }
+  function sortCars(list) {
+    const c = [...list], k = F.sort;
+    // Recommendation: live deals by score; bought on top, declined/dropped/gone at the bottom. A reply alone earns nothing.
+    const tier = c => c.status === "bought" ? 0 : (c.gone || ["declined", "dropped"].includes(c.status)) ? 3 : c._crit.length ? 2 : 1;
+    const rec = (a, b) => (tier(a) - tier(b)) || ((b.score ?? -1) - (a.score ?? -1)) || ((tripMin(a) ?? 999) - (tripMin(b) ?? 999)) || ((STATUS_RANK[a.status] ?? 5) - (STATUS_RANK[b.status] ?? 5)) || ((a.order ?? 99) - (b.order ?? 99));
+    if (k === "reply") c.sort((a, b) => (b.replyAssessment?.score ?? -1) - (a.replyAssessment?.score ?? -1) || (b.score ?? -1) - (a.score ?? -1));
+    else if (k === "score") c.sort((a, b) => (b.score ?? -1) - (a.score ?? -1));
+    else if (k === "price") c.sort((a, b) => a.price - b.price);
+    else if (k === "km") c.sort((a, b) => a.km - b.km);
+    else if (k === "year") c.sort((a, b) => (b.regYear * 100 + (b.regMonth || 1)) - (a.regYear * 100 + (a.regMonth || 1)));
+    else if (k === "drive") c.sort((a, b) => (tripMin(a) ?? 999) - (tripMin(b) ?? 999));
+    else if (k === "value") c.sort((a, b) => ((b.score ?? 0) / b.price) - ((a.score ?? 0) / a.price));
+    else c.sort(rec);
+    return c;
+  }
+  const visible = () => sortCars(cars.filter(matches));
+
+  // Adjustable ownership cash-flow estimate. Stored only in this browser.
+  const COST_DEFAULT = { annualKm: 15000, fuelPrices: { diesel: 1.75, petrol: 1.85, hybrid: 1.85, plugin: 1.85, lpg: 1.05, electric: 0.40 }, apr: 7.5, insurance: 850, upkeep: 1000, fixed: 250 };
+  let costPrefs = { ...COST_DEFAULT }, costSelected = [], costUse = {};
+  let costPrefsStored = false;
+  try { const x = JSON.parse(localStorage.getItem("carhunt-costs") || "null"); if (x) { costPrefsStored = true; costPrefs = { ...costPrefs, ...(x.prefs || {}), fuelPrices: { ...COST_DEFAULT.fuelPrices, ...((x.prefs || {}).fuelPrices || {}) } }; delete costPrefs.fuelPrice; costSelected = x.selected || costSelected; costUse = x.use || {}; } } catch (e) {}
+  const saveCosts = () => { try { localStorage.setItem("carhunt-costs", JSON.stringify({ prefs: costPrefs, selected: costSelected, use: costUse })); } catch (e) {} };
+  function estimatedUse(c) { return { diesel: 5.8, petrol: 7.0, hybrid: 5.0, plugin: 4.0, lpg: 9.0, electric: 18 }[Criteria.fuelOf(c)] || 6.5; }
+  const fin = () => P.money.finance;
+  const loanFactor = apr => { const n = fin().months, r = apr / 1200; return r ? r / (1 - Math.pow(1 + r, -n)) : 1 / n; };
+  const loanMonthly = (price, apr) => Math.max(0, price - fin().downPayment) * loanFactor(apr);
+  const loanCap = () => fin().monthlyCap;
+  const loanPriceLimit = () => fin().enabled ? fin().downPayment + loanCap() / loanFactor(costPrefs.apr) : P.money.maxPrice;
+  function renderCosts(list) {
+    const t = COST_I18N[lang], host = $("#costs"); host.innerHTML = "";
+    host.append(el("h2", null, t.title), el("p", "intro", t.intro));
+    const inputs = el("div", "cost-inputs");
+    const addInput = (label, min, max, step, get, set) => {
+      const l = el("label", null, label), input = el("input"); input.type = "number"; input.min = min; input.max = max; input.step = step; input.value = get(); input.setAttribute("aria-label", label);
+      input.onchange = () => { const n = Number(input.value); if (Number.isFinite(n)) set(Math.min(max, Math.max(min, n))); saveCosts(); render(); }; l.append(input); inputs.append(l);
+    };
+    const pref = (key, label, min, max, step) => addInput(label, min, max, step, () => costPrefs[key], n => { costPrefs[key] = n; });
+    pref("annualKm", t.km, 1000, 50000, 1000);
+    P.car.fuels.forEach(fu => addInput(`${UX[lang].fuels[fu]} ${fu === "electric" ? "€/kWh" : "€/l"}`, .01, 5, .01, () => costPrefs.fuelPrices[fu], n => { costPrefs.fuelPrices[fu] = n; }));
+    if (fin().enabled) pref("apr", t.apr, 0, 25, .1);
+    pref("insurance", t.insurance, 0, 5000, 50); pref("upkeep", t.upkeep, 0, 5000, 50); pref("fixed", t.fixed, 0, 2000, 10);
+    host.append(inputs);
+    host.append(el("strong", null, t.pick)); const picks = el("div", "cost-picks");
+    const choices = [...new Map([...list.slice(0, 12), ...costSelected.map(id => cars.find(c => c.id === id)).filter(Boolean)].map(c => [c.id, c])).values()];
+    choices.forEach(c => { const b = el("button", null, c.displayTitle || c.title); b.type = "button"; b.setAttribute("aria-pressed", costSelected.includes(c.id)); b.disabled = costSelected.length >= 6 && !costSelected.includes(c.id); b.onclick = () => { if (costSelected.includes(c.id)) costSelected = costSelected.filter(x => x !== c.id); else if (costSelected.length < 6) costSelected.push(c.id); saveCosts(); render(); }; picks.append(b); }); host.append(picks);
+    const rows = costSelected.map(id => cars.find(c => c.id === id)).filter(c => c && !c.gone && !["dropped", "declined"].includes(c.status)).map(c => {
+      const use = Number.isFinite(Number(costUse[c.id])) && Number(costUse[c.id]) > 0 ? Number(costUse[c.id]) : estimatedUse(c);
+      const fu = Criteria.fuelOf(c), elec = fu === "electric", fuelPrice = Number(costPrefs.fuelPrices[fu] ?? costPrefs.fuelPrices.petrol);
+      const fuel = costPrefs.annualKm * use / 100 * fuelPrice, fees = Number(costPrefs.insurance) + Number(costPrefs.fixed), repair = Number(costPrefs.upkeep), loan = fin().enabled ? loanMonthly(c.price, costPrefs.apr) * 12 : 0;
+      return { c, use, elec, fuel, fees, repair, loan, total: fuel + fees + repair + loan };
+    });
+    const max = Math.max(...rows.map(r => r.total), 1), wrap = el("div", "cost-rows");
+    const parts = r => [["fuel", t.fuel, r.fuel], ["fixed", t.fees, r.fees], ["repair", t.repair, r.repair], ...(fin().enabled ? [["loan", t.loan, r.loan]] : [])];
+    rows.forEach(r => { const row = el("div", "cost-row"), name = el("div"); name.append(el("strong", null, r.c.displayTitle || r.c.title)); const useLabel = el("label"); useLabel.append(document.createTextNode(t.use + " ")); const useInput = el("input"); useInput.type = "number"; const [uMin, uMax, unit] = r.elec ? [10, 30, "kWh/100 km"] : [3, 12, "l/100 km"]; useInput.min = uMin; useInput.max = uMax; useInput.step = .1; useInput.value = r.use; useInput.style.width = "52px"; useInput.setAttribute("aria-label", `${r.c.displayTitle || r.c.title}: ${t.use} ${unit}`); useInput.onchange = () => { const n = Number(useInput.value); if (Number.isFinite(n)) costUse[r.c.id] = Math.min(uMax, Math.max(uMin, n)); saveCosts(); renderCosts(list); }; useLabel.append(useInput, document.createTextNode(" " + unit)); name.append(useLabel);
+      const bar = el("div", "cost-bar"); bar.setAttribute("role", "img"); bar.setAttribute("aria-label", `${r.c.displayTitle || r.c.title}: ` + parts(r).map(([, label, v]) => `${label} ${eur(v)}`).join(", "));
+      parts(r).forEach(([cls, , value]) => { const part = el("span", cls); part.style.width = (value / max * 100) + "%"; bar.append(part); });
+      const graph = el("div", "cost-graph"); graph.append(bar, el("div", "cost-detail", parts(r).map(([, label, v]) => `${label} ${eur(Math.round(v))}`).join(" · ")));
+      const total = el("div", "cost-total", `${eur(Math.round(r.total))}${t.year}`); total.append(el("small", null, ` ${eur(Math.round(r.total / 12))}${t.month}`)); row.append(name, graph, total); wrap.append(row);
+    }); host.append(wrap);
+    const key = el("div", "cost-key"); [["fuel", t.fuel], ["fixed", t.fees], ["repair", t.repair], ...(fin().enabled ? [["loan", t.loan]] : [])].forEach(([cls, label]) => { const item = el("span"); item.append(el("i", cls), document.createTextNode(label)); key.append(item); }); host.append(key);
+    const note = el("p", "cost-note", fin().enabled ? t.note(fin().months, eur(fin().downPayment)) : t.noteNoLoan); host.append(note);
+  }
+
+  // ---------- header ----------
+  const HEAD_LABELS = { en: ["Add a car", "Settings"], de: ["Auto hinzufügen", "Einstellungen"], pt: ["Adicionar carro", "Configurações"] };
+  const addCar = () => Setup.addCar({ lang, onSaved: () => load() });
+  const scoreTxt = c => c.score == null ? "–" : (c.scoreEstimated ? "≈" : "") + c.score;
+  const estTitle = (node, c) => { if (c && c.scoreEstimated) node.title = UX[lang].estTip; return node; };
+  // First run: no cars yet. A welcome card replaces the panels that need data.
+  function renderWelcome() {
+    const host = $("#welcome"), empty = !cars.length; host.hidden = !empty; host.innerHTML = "";
+    ["kpis", "visit", "decision", "updates", "listings", "cards", "costs", "explore", "compare"].forEach(id => { const n = document.getElementById(id); if (empty) n.hidden = true; else if (!["visit", "updates"].includes(id)) n.hidden = false; });
+    $(".tabs").hidden = empty;
+    if (!empty) return;
+    const t = UX[lang];
+    const b = el("button", "btn primary", HEAD_LABELS[lang][0]); b.type = "button"; b.onclick = addCar;
+    const a = el("a", null, t.welcomeRoutine); a.href = "https://github.com/DasMehl/car-hunt/blob/main/routine/README.md"; a.target = "_blank"; a.rel = "noopener";
+    const acts = el("div", "welcome-actions"); acts.append(b, a);
+    host.append(el("h2", null, t.welcomeTitle), el("p", null, t.welcomeText), acts);
+  }
+  function renderHeader() {
+    $("#apptitle").textContent = P.name; document.title = P.name;
+    document.querySelectorAll(".lang button").forEach(b => b.hidden = !P.languages.includes(b.dataset.lang));
+    document.documentElement.lang = T.locale;
+    $("#sub").textContent = T.sub(cars.length, meta.lastCheck ? fmtDate(meta.lastCheck) : null, homeShort());
+    document.querySelectorAll(".lang button").forEach(b => b.setAttribute("aria-pressed", b.dataset.lang === lang));
+    const n = cars.filter(isNew).length; const p = $("#newpill");
+    p.hidden = !n; p.textContent = T.newSince(n);
+    p.onclick = () => { try { localStorage.setItem("carhunt-lastvisit", new Date().toISOString()); } catch (e) {} lastVisit = new Date().toISOString(); render(); };
+    const ax = HEAD_LABELS[lang];
+    $("#addcar").textContent = ax[0]; $("#addcar").onclick = addCar;
+    $("#settings").textContent = ax[1]; $("#settings").onclick = () => Setup.open({ mode: "settings", lang, onSaved: () => load() });
+    $("#maptitle").textContent = T.map; $("#charttitle").textContent = T.chart; $("#listtitle").textContent = T.list; $("#cmptitle").textContent = UX[lang].cmp; $("#howto").textContent = UX[lang].howto;
+    // Jump links only for sections that currently have content.
+    const has = { visit: visitCars().length > 0, decision: cars.length > 0, listings: cars.length > 0, costs: cars.length > 0, explore: cars.length > 0, compare: costSelected.some(id => cars.some(c => c.id === id)) };
+    const nav = $("#jumpnav"); nav.innerHTML = ""; Object.keys(has).filter(id => has[id]).forEach(id => { const a = el("a", null, UX[lang].nav[id]); a.href = "#" + id; nav.append(a); }); nav.hidden = !nav.childElementCount;
+    // Phone bar: filter toggle with the number of active filters, and map/chart tabs.
+    const active = F.statuses.size + F.models.size + !!F.query + F.savedOnly + (fin().enabled && F.affordable) + (F.maxPrice < DEF.maxPrice) + (F.maxKm < DEF.maxKm) + (F.maxDrive !== DEF.maxDrive) + (F.includeUnverified !== DEF.includeUnverified) + F.carplay + F.cam + F.acc + !F.inCriteria + F.dealer + (!F.hideGone);
+    const fb = $("#fbtn"); fb.textContent = filtersOpen ? T.fClose : T.fBtn(active); fb.setAttribute("aria-pressed", filtersOpen); fb.onclick = () => { filtersOpen = !filtersOpen; document.body.classList.toggle("filters-open", filtersOpen); renderHeader(); };
+    document.querySelectorAll(".tabs button").forEach(b => { b.textContent = b.dataset.tab === "map" ? T.tabMap : T.tabChart; b.setAttribute("aria-selected", b.dataset.tab === panelTab); b.onclick = () => { panelTab = b.dataset.tab; $(".panels").dataset.tab = panelTab; renderHeader(); if (panelTab === "map" && map) setTimeout(() => map.invalidateSize(), 50); }; });
+    $(".panels").dataset.tab = panelTab;
+    const ld = $("#loading"); if (ld) ld.textContent = T.loading;
+  }
+
+  // ---------- filters ----------
+  function renderFilters() {
+    const a = $("#filters"); a.innerHTML = "";
+    const search = el("input"); search.type = "search"; search.value = F.query || ""; search.placeholder = UX[lang].search; search.setAttribute("aria-label", UX[lang].search); search.style.width = "100%"; search.style.padding = "8px"; search.style.border = "1px solid var(--line)"; search.style.borderRadius = "7px"; search.style.background = "var(--surface)";
+    search.oninput = () => { const start = search.selectionStart; F.query = search.value; saveF(); render(); const replacement = $("#filters input[type=search]"); replacement.focus(); replacement.setSelectionRange(start, start); }; a.append(search);
+    const quick = el("div", "toggles"); [["savedOnly", UX[lang].savedOnly], ...(fin().enabled ? [["affordable", UX[lang].affordable(eur(loanCap()))]] : [])].forEach(([k, label]) => { const l = el("label"), box = el("input"); box.type = "checkbox"; box.checked = !!F[k]; box.onchange = () => { F[k] = box.checked; saveF(); render(); }; l.append(box, document.createTextNode(label)); quick.append(l); }); a.append(quick);
+    const s1 = el("div"); s1.append(el("h3", null, T.fStatus));
+    const cs = el("div", "chipset"); const counts = {}; cars.forEach(c => counts[c.status] = (counts[c.status] || 0) + 1);
+    STATUS_ORDER.filter(s => counts[s]).forEach(s => { const b = el("button", "chip"); b.type = "button"; b.setAttribute("aria-pressed", F.statuses.has(s)); const d = el("i", "dot"); d.style.color = s === "candidate" ? "var(--muted)" : s === "contacted" ? "var(--info)" : ["replied", "call"].includes(s) ? "var(--warn)" : ["viewing", "bought"].includes(s) ? "var(--good)" : "var(--bad)"; b.append(d, document.createTextNode(T.status[s] + " · " + counts[s])); b.onclick = () => { if (F.statuses.has(s)) F.statuses.delete(s); else F.statuses.add(s); saveF(); render(); }; cs.append(b); });
+    s1.append(cs); if (cs.childElementCount) a.append(s1);
+    // Model chips include every family currently tracked.
+    const sm = el("div"); sm.append(el("h3", null, T.fModel)); const ms = el("div", "chipset");
+    const mc = {}; cars.forEach(c => { const family = famOf(c); mc[family] = (mc[family] || 0) + 1; });
+    const labels = {};
+    Object.keys(mc).sort((a, b) => (labels[a] || a).localeCompare(labels[b] || b)).forEach(m => { const b = el("button", "chip", (labels[m] || m) + " · " + mc[m]); b.type = "button"; b.setAttribute("aria-pressed", F.models.has(m)); b.onclick = () => { if (F.models.has(m)) F.models.delete(m); else F.models.add(m); saveF(); render(); }; ms.append(b); });
+    sm.append(ms); if (ms.childElementCount) a.append(sm);
+    const s2 = el("div"); s2.append(el("h3", null, T.fLimits));
+    const rng = (key, label, min, max, step, fmt) => { const w = el("div", "range"); const l = el("label"); l.innerHTML = `<span>${label}</span><b>${fmt(F[key])}</b>`; const i = el("input"); i.type = "range"; i.min = min; i.max = max; i.step = step; i.value = F[key]; i.id = "f-" + key; i.oninput = () => { F[key] = +i.value; l.querySelector("b").textContent = fmt(F[key]); }; i.onchange = () => { saveF(); render(); }; w.append(l, i); return w; };
+    s2.append(rng("maxPrice", T.maxPrice, 0, DEF.maxPrice, 250, eur), rng("maxKm", T.maxKm, 0, DEF.maxKm, 5000, km), rng("maxDrive", (P.distance.preferTransit ? T.maxDrive : T.maxDriveCar), 10, 600, 10, v => v + " " + T.min));
+    s2.append(el("p", "muted", P.distance.preferTransit ? T.transitNote : T.driveNote));
+    a.append(s2);
+    const toggles = (title, items) => { const box = el("div"); box.append(el("h3", null, title)); const tg = el("div", "toggles"); items.forEach(([k, l]) => { const lab = el("label"); const i = el("input"); i.type = "checkbox"; i.checked = !!F[k]; i.id = "t-" + k; i.onchange = () => { F[k] = i.checked; saveF(); render(); }; lab.append(i, document.createTextNode(l)); tg.append(lab); }); box.append(tg); a.append(box); };
+    toggles(T.fMust, [["carplay", T.needCarplay], ["cam", T.needCam], ["acc", T.needAcc]]);
+    // Display options, not equipment.
+    toggles(T.fShow, [["inCriteria", T.inCriteria], ["includeUnverified", T.includeUnverified], ["dealer", T.dealerOnly], ["hideGone", T.hideGone]]);
+    const s4 = el("div"); s4.append(el("h3", null, T.fSort)); const sel = el("select"); sel.id = "sort"; Object.entries(T.sortOpts).forEach(([k, v]) => { const o = el("option", null, k === "drive" && !P.distance.preferTransit ? T.sortDriveCar : v); o.value = k; o.selected = k === F.sort; sel.append(o); }); sel.onchange = () => { F.sort = sel.value; saveF(); render(); }; s4.append(sel); a.append(s4);
+    const r = el("button", "reset", T.reset); r.type = "button"; r.onclick = () => { F = { ...DEF, statuses: new Set(), models: new Set() }; saveF(); render(); }; a.append(r);
+  }
+
+  // ---------- KPIs ----------
+  function renderKpis(list) {
+    const k = $("#kpis"); k.innerHTML = "";
+    const tile = (v, l, s, onclick) => { const t = el("button", "kpi"); t.type = "button"; t.append(el("div", "v", v), el("div", "l", l)); if (s) t.append(el("div", "s", s)); if (onclick) t.onclick = onclick; k.append(t); return t; };
+    tile(String(list.length), T.kpiMatch, cars.length + " " + (cars.length === 1 ? T.car : T.cars));
+    const best = [...list].sort((a, b) => (b.score ?? -1) - (a.score ?? -1))[0];
+    if (best) estTitle(tile(scoreTxt(best), T.kpiBest, best.displayTitle || best.title, () => openCar(best.id)), best);
+    const cheap = [...list].sort((a, b) => a.price - b.price)[0];
+    if (cheap) tile(eur(cheap.price), T.kpiCheap, cheap.displayTitle || cheap.title, () => openCar(cheap.id));
+    const near = [...list].filter(c => tripMin(c)).sort((a, b) => tripMin(a) - tripMin(b))[0];
+    if (near) tile("~" + tripMin(near) + " " + T.min, T.kpiNear, near.city + " · " + (near.displayTitle || near.title), () => openCar(near.id));
+    const ps = list.map(c => c.price).sort((a, b) => a - b); if (ps.length) tile(eur(ps[Math.floor(ps.length / 2)]), T.kpiMedian, "");
+  }
+
+  const visitCars = () => cars.filter(c => c.visit && !c.gone && !["declined", "dropped"].includes(c.status)).sort((a, b) => a.visit.rank - b.visit.rank);
+  // Hand-picked from seller replies: cars carry visit {rank, why{en,de,pt}, next{en,de,pt}}.
+  function renderVisit() {
+    const t = UX[lang], host = $("#visit"); host.innerHTML = "";
+    const pick = visitCars();
+    host.hidden = !pick.length; if (!pick.length) return;
+    const head = el("div", "decision-head"); head.append(el("h2", null, t.visitTitle), el("p", null, t.visitHint)); host.append(head);
+    const ol = el("ol", "visit-list");
+    pick.forEach(c => {
+      const li = el("li"); const b = el("button", "decision-item"); b.type = "button";
+      const v = c.visit, pickLang = o => (o && (o[lang] || o.en)) || "";
+      b.append(el("strong", null, `${v.rank}. ${c.displayTitle || c.title}`), el("small", null, `${c.city || ""} · ${eur(c.price)} · ${km(c.km)} · ${c.driveMin ? c.driveMin + " " + T.min + " " + T.byCar : ""} · ${scoreTxt(c)} ${t.score}`));
+      estTitle(b, c); b.append(el("span", null, pickLang(v.why)));
+      if (v.next) b.append(el("small", "visit-next", `${t.visitNext}: ${pickLang(v.next)}`));
+      b.onclick = () => openCar(c.id); li.append(b); ol.append(li);
+    });
+    host.append(ol);
+  }
+  function renderDecision(list) {
+    const t = UX[lang], host = $("#decision"); host.innerHTML = "";
+    const head = el("div", "decision-head"); head.append(el("h2", null, t.focus), el("p", null, t.focusHint)); host.append(head);
+    const available = list.filter(c => !c.gone && !["declined", "dropped"].includes(c.status));
+    const focus = [...available.filter(c => c.pick), ...available.filter(c => !c.pick)].slice(0, 4);
+    if (!focus.length) { host.append(el("p", "empty", t.noFocus)); return; }
+    const grid = el("div", "decision-grid"); focus.forEach(c => {
+      const item = el("button", "decision-item"); item.type = "button"; item.setAttribute("aria-label", t.details + ": " + (c.displayTitle || c.title));
+      item.append(el("strong", null, c.displayTitle || c.title), estTitle(el("small", null, `${c.city || ""} · ${km(c.km)} · ${scoreTxt(c)} ${t.score}`), c));
+      item.append(el("span", "money", fin().enabled ? `${eur(c.price)} · ${eur(Math.round(loanMonthly(c.price, costPrefs.apr)))} ${t.loan}` : eur(c.price)));
+      const step = c.nextStep || (tf(c, "questions") || [])[0]; if (step) item.append(el("small", null, step));
+      item.onclick = () => openCar(c.id); grid.append(item);
+    }); host.append(grid);
+  }
+
+  // ---------- map ----------
+  let map, markers, homeMarker, homeKey = "";
+  function renderMap(list) {
+    if (!window.L) return;
+    const vis = new Set(list.map(c => c.id));
+    const h = HOME(), key = h.lat + "," + h.lon + "," + h.label;
+    const fit = () => { const pts = list.filter(c => c.lat && c.lon).map(c => [c.lat, c.lon]); pts.push([h.lat, h.lon]); if (pts.length > 1) map.fitBounds(pts, { padding: [24, 24], maxZoom: 10 }); };
+    if (!map) {
+      map = L.map("map", { scrollWheelZoom: false }).setView([h.lat, h.lon], 8);
+      L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { attribution: "© OpenStreetMap contributors", maxZoom: 18 }).addTo(map);
+      homeMarker = L.marker([h.lat, h.lon], { icon: L.divIcon({ className: "", html: '<div class="homepin"></div>', iconSize: [14, 14], iconAnchor: [7, 7] }), zIndexOffset: 1000 }).addTo(map).bindTooltip(h.label || T.home);
+      markers = L.layerGroup().addTo(map);
+      homeKey = key; fit();
+    } else if (key !== homeKey) {
+      homeKey = key; homeMarker.setLatLng([h.lat, h.lon]); homeMarker.setTooltipContent(h.label || T.home); fit();
+    }
+    markers.clearLayers();
+    cars.filter(c => c.lat && c.lon).forEach(c => {
+      const dim = !vis.has(c.id);
+      const m = L.marker([c.lat, c.lon], { icon: L.divIcon({ className: "", html: `<div class="carpin${dim ? " dim" : ""}" style="background:${scoreHex(c.score)}">${c.score ?? ""}</div>`, iconSize: [26, 26], iconAnchor: [13, 13] }), zIndexOffset: dim ? 0 : 500 });
+      m.bindTooltip(`${esc(c.displayTitle || c.title)}<br>${esc(eur(c.price))} · ${esc(km(c.km))}<br>${esc(c.city || "")} · ${esc(tripText(c))}`);
+      m.on("click", () => openCar(c.id)); markers.addLayer(m);
+    });
+    $("#maplegend").innerHTML = `<span><i style="background:#1d7a4b"></i>${T.scoreHigh}</span><span><i style="background:#c07d13"></i>${T.scoreMid}</span><span><i style="background:#b4393b"></i>${T.scoreLow}</span><span><i style="background:var(--fg)"></i>${T.home}</span>`;
+  }
+
+  // ---------- scatter ----------
+  function renderChart(list) {
+    if (!cars.length) { $("#chart").innerHTML = ""; return; }
+    const vis = new Set(list.map(c => c.id));
+    const W = 600, H = 360, PAD = { l: 52, r: 16, t: 14, b: 34 };
+    const xs = cars.map(c => c.km), ys = cars.map(c => c.price);
+    const x0 = Math.floor(Math.min(...xs) / 10000) * 10000, x1 = Math.max(x0 + 10000, Math.ceil(Math.max(...xs) / 10000) * 10000);
+    const y0 = Math.floor(Math.min(...ys) / 500) * 500, y1 = Math.ceil(Math.max(...ys, loanPriceLimit() + 300) / 500) * 500;
+    const X = v => PAD.l + (v - x0) / (x1 - x0) * (W - PAD.l - PAD.r), Y = v => H - PAD.b - (v - y0) / (y1 - y0) * (H - PAD.t - PAD.b);
+    let s = `<svg viewBox="0 0 ${W} ${H}" role="img">`;
+    for (let v = x0; v <= x1; v += 20000) s += `<line class="grid" x1="${X(v)}" y1="${PAD.t}" x2="${X(v)}" y2="${H - PAD.b}"/><text x="${X(v)}" y="${H - 14}" text-anchor="middle">${Math.round(v / 1000)}k</text>`;
+    for (let v = y0; v <= y1; v += 1000) s += `<line class="grid" x1="${PAD.l}" y1="${Y(v)}" x2="${W - PAD.r}" y2="${Y(v)}"/><text x="${PAD.l - 6}" y="${Y(v) + 4}" text-anchor="end">${Math.round(v / 1000)}k €</text>`;
+    const limit = loanPriceLimit(); s += `<line class="budget" x1="${PAD.l}" y1="${Y(limit)}" x2="${W - PAD.r}" y2="${Y(limit)}"/><text x="${W - PAD.r}" y="${Y(limit) - 4}" text-anchor="end">${(fin().enabled ? UX[lang].loanLimit(eur(loanCap())) : UX[lang].maxPriceLine)} ${eur(limit)}</text>`;
+    sortCars(cars).reverse().forEach(c => { const dim = !vis.has(c.id); const r = dim ? 5 : 8; s += `<circle class="pt${dim ? " dim" : ""}" data-id="${c.id}" cx="${X(c.km)}" cy="${Y(c.price)}" r="${r}" fill="${scoreHex(c.score)}"><title>${esc(c.displayTitle || c.title)} · ${esc(eur(c.price))} · ${esc(km(c.km))} · ${c.score ?? ""}</title></circle>`; });
+    s += "</svg>";
+    const ch = $("#chart"); ch.innerHTML = s;
+    ch.querySelectorAll(".pt").forEach(p => p.onclick = () => openCar(p.dataset.id));
+    $("#chartlegend").innerHTML = `<span><i style="background:#1d7a4b"></i>${T.scoreHigh}</span><span><i style="background:#c07d13"></i>${T.scoreMid}</span><span><i style="background:#b4393b"></i>${T.scoreLow}</span><span>— — ${(fin().enabled ? UX[lang].loanLimit(eur(loanCap())) : UX[lang].maxPriceLine)}</span>`;
+  }
+
+  // ---------- updates ----------
+  function renderUpdates() {
+    const u = $("#updates"); const log = (meta.log || []).slice(0, 8);
+    u.hidden = !log.length; if (!log.length) return;
+    u.innerHTML = `<h3>${T.updates}</h3>`; const ul = el("ul");
+    log.forEach(e => { const li = el("li"); const tag = el("span", "tag " + e.type, { new: T.upNew, price: T.upPrice, gone: T.upGone, back: T.upBack }[e.type] || e.type); const a = el("a", null, e.text || e.id); a.href = "#car-" + e.id; a.onclick = ev => { ev.preventDefault(); openCar(e.id); }; li.append(el("span", "d", fmtDate(e.date)), tag, a); if (e.type === "price") li.append(el("span", "muted", eur(e.from) + " → " + eur(e.to))); if (e.type === "new" && e.price) li.append(el("span", "muted", eur(e.price))); ul.append(li); });
+    u.append(ul);
+  }
+
+  // ---------- list ----------
+  function openCar(id) { expanded.add(id); const c = cars.find(x => x.id === id); if (c && !matches(c)) { F = { ...DEF, statuses: new Set(), models: new Set(), hideGone: false, includeUnverified: true, inCriteria: false }; saveF(); } render(); const t = document.getElementById("car-" + id); if (t) t.scrollIntoView({ behavior: "smooth", block: "start" }); }
+  function factCls(kind, v) {
+    if (kind === "price") return v <= loanPriceLimit() ? "good" : v <= Math.max(loanPriceLimit(), P.money.negotiableUpTo) ? "warn" : "bad";
+    if (kind === "km") return v <= P.car.maxKm * 0.85 ? "good" : v <= P.car.maxKm ? "warn" : "bad";
+    if (kind === "drive") return v <= P.distance.maxDriveMin ? "good" : v <= P.distance.maxDriveMin * 1.5 ? "warn" : "bad";
+    return "";
+  }
+  function ring(c) {
+    const score = c.score, r = 24, C = 2 * Math.PI * r, s = score ?? 0; const w = el("div", "ring" + (c.scoreEstimated ? " est" : ""));
+    w.innerHTML = `<svg viewBox="0 0 56 56"><circle class="bg" cx="28" cy="28" r="${r}"/><circle class="fg" cx="28" cy="28" r="${r}" stroke="${scoreColor(score)}" stroke-dasharray="${C * s / 100} ${C}"/></svg><div class="n" style="color:${scoreColor(score)}">${esc(scoreTxt(c))}</div>`;
+    return estTitle(w, c);
+  }
+  function card(c) {
+    const out = c.gone || ["declined", "dropped"].includes(c.status);
+    const art = el("article", "card" + (out ? " is-out" : "") + (expanded.has(c.id) ? " open" : "")); art.id = "car-" + c.id;
+    const row = el("div", "row"); row.setAttribute("role", "button"); row.tabIndex = 0; row.setAttribute("aria-expanded", expanded.has(c.id));
+    const tw = el("div", "thumbwrap"); tw.append(photo((c.photos || [])[0], "thumb", ""));
+    if (isNew(c)) tw.append(el("span", "tag new badge-new", T.newBadge)); row.append(tw);
+    const mid = el("div", "rowmain");
+    const h = el("h2", null, c.displayTitle || c.title); const st = tf(c, "sellerType"); if (st) h.append(el("span", "seller " + (isDealer(c) ? "d" : "p"), st));
+    if (c.gone) h.append(el("span", "tag gone", T.gone));
+    if (c._crit.length) { const t = el("span", "tag out", UX[lang].outside); t.title = c._crit.map(critText).join(" · "); h.append(t); }
+    const l2 = el("div", "line2"); const eng = engineTxt(c);
+    l2.innerHTML = [eng && `<b>${esc(eng)}</b>`, esc(tf(c, "dsgType") || c.gearbox || ""), esc(c.city || c.location || ""), `<b>${esc(tripText(c))}</b>`, tripMin(c) > P.distance.maxDriveMin * 1.5 ? esc(T.transitLong) : ""].filter(Boolean).join(" · ");
+    const facts = el("div", "facts");
+    facts.append(el("span", "fact price " + factCls("price", c.price), eur(c.price) + (c.negotiable ? " " + T.neg : "")));
+    if (fin().enabled) facts.append(el("span", "fact " + (loanMonthly(c.price, costPrefs.apr) <= loanCap() ? "good" : "bad"), eur(Math.round(loanMonthly(c.price, costPrefs.apr))) + " " + UX[lang].loan));
+    facts.append(el("span", "fact " + factCls("km", c.km), km(c.km)));
+    facts.append(el("span", "fact", (c.regMonth ? String(c.regMonth).padStart(2, "0") + "/" : "") + c.regYear));
+    if (tf(c, "hu")) facts.append(el("span", "fact", T.hu + " " + tf(c, "hu")));
+    if (c.owners != null && c.owners !== "") facts.append(el("span", "fact", T.owners(c.owners)));
+    const kpy = kmPerYear(c); if (kpy) { const u = el("span", "fact", new Intl.NumberFormat(T.locale).format(Math.round(kpy / 1000) * 1000) + " " + T.kmYear); u.title = T.kmYearTip; facts.append(u); }
+    const eq = el("div", "eq"); EQ_KEYS.forEach(k => { const v = (c.equip || {})[k] || 0; if (!v) return; const s = el("span", v >= 1 ? "on" : "maybe", T.eq[k] + (v < 1 ? " ?" : "")); if (v < 1) s.title = T.eqMaybe; eq.append(s); });
+    mid.append(h, l2, facts, eq); row.append(mid);
+    const side = el("div", "rowside"); side.append(ring(c));
+    if (c.replyAssessment?.score != null) { const rr = el("span", "pill", `${UX[lang].reply}: ${c.replyAssessment.score}/10`); rr.title = UX[lang].replyHint; side.append(rr); }
+    side.append(el("span", "pill s-" + c.status, T.status[c.status] || c.status));
+    const pk = el("label", "pick" + (c.pick ? " on" : "")); const cb = el("input"); cb.type = "checkbox"; cb.checked = !!c.pick; cb.id = "pick-" + c.id; pk.append(cb, el("span", null, c.pick ? UX[lang].shortlisted : UX[lang].shortlist));
+    pk.onclick = e => e.stopPropagation(); cb.onchange = () => save(c.id, { pick: cb.checked });
+    const compare = el("button", "compare-toggle", costSelected.includes(c.id) ? UX[lang].comparing : UX[lang].compare); compare.type = "button"; compare.setAttribute("aria-pressed", costSelected.includes(c.id)); compare.disabled = costSelected.length >= 6 && !costSelected.includes(c.id); compare.onclick = e => { e.stopPropagation(); if (costSelected.includes(c.id)) costSelected = costSelected.filter(x => x !== c.id); else costSelected.push(c.id); saveCosts(); render(); }; side.append(pk, compare); row.append(side);
+    const toggle = () => { if (expanded.has(c.id)) expanded.delete(c.id); else expanded.add(c.id); art.classList.toggle("open", expanded.has(c.id)); row.setAttribute("aria-expanded", expanded.has(c.id)); const d = art.querySelector(".detail"); if (expanded.has(c.id) && !d) art.append(detail(c)); else if (!expanded.has(c.id) && d) d.remove(); };
+    row.onclick = toggle; row.onkeydown = e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(); } };
+    art.append(row); if (expanded.has(c.id)) art.append(detail(c));
+    return art;
+  }
+  const engineTxt = c => c.engine ? c.engine.replace(/(\d+)\s*hp\b/i, (m, n) => n + " " + T.hp) : c.hp ? c.hp + " " + T.hp : "";
+  // Listing photo, or a neutral placeholder when there is none or it fails to load.
+  const CAR_SVG = '<svg viewBox="0 0 64 40" aria-hidden="true"><path d="M6 28v-6l6-2 7-9h22l9 9 8 2v6" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round"/><path d="M4 28h56" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/><circle cx="17" cy="29" r="5" fill="var(--surface-2)" stroke="currentColor" stroke-width="2.5"/><circle cx="47" cy="29" r="5" fill="var(--surface-2)" stroke="currentColor" stroke-width="2.5"/></svg>';
+  function placeholder(cls) { const d = el("div", cls + " ph"); d.innerHTML = CAR_SVG; return d; }
+  function photo(src, cls, alt) {
+    if (typeof src !== "string" || !src.trim()) return placeholder(cls);
+    const im = el("img", cls); im.src = src; im.alt = alt; im.loading = "lazy"; im.onerror = () => im.replaceWith(placeholder(cls)); return im;
+  }
+  const isHttp = v => typeof v === "string" && /^https?:\/\//i.test(v);
+  function specRow(dl, k, v) { if (v == null || v === "") return; const d = el("div"); d.append(el("dt", null, k), el("dd", null, String(v))); dl.append(d); }
+  function detail(c) {
+    const d = el("div", "detail");
+    const head = el("div", "dhead");
+    const ph = el("div", "photos"); const photos = c.photos || []; const idx = Math.min(openPhoto[c.id] || 0, Math.max(photos.length - 1, 0));
+    if (!photos.length) ph.append(placeholder("mainimg"));
+    const main = el("img", "mainimg"); main.src = photos[idx] || ""; main.alt = c.title; if (photos.length) ph.append(main);
+    if (photos.length > 1) { const th = el("div", "thumbs"); photos.forEach((p, i) => { const im = el("img", i === idx ? "on" : ""); im.src = p; im.alt = ""; im.onclick = () => { openPhoto[c.id] = i; main.src = p; th.querySelectorAll("img").forEach(x => x.classList.toggle("on", x === im)); }; th.append(im); }); ph.append(th); }
+    head.append(ph);
+    const f = el("div", "dfacts");
+    const tr = el("div", "travel");
+    const t1 = el("div"); t1.innerHTML = `<b>${esc(tripText(c))}</b>${tripMin(c) ? esc(T.transitApprox.charAt(0).toUpperCase() + T.transitApprox.slice(1)) : ""}`; tr.append(t1);
+    const t2 = el("div"); t2.innerHTML = `<b>${esc(c.location || c.city || "")}</b>${esc(P.distance.preferTransit ? (c.transitCheckedAt ? T.transitNote : T.transitUnknown) : (driveMinutes(c) ? T.driveNote : T.tripUnknown))}`; tr.append(t2);
+    if (tf(c, "sellerName") || tf(c, "sellerType") || c.phone) { const t3 = el("div"); t3.innerHTML = `<b>${esc(tf(c, "sellerName"))}</b>${esc(tf(c, "sellerType"))}${c.phone ? ` · ${T.phone} <span class="phone">${esc(c.phone)}</span>` : ""}`; tr.append(t3); }
+    f.append(tr);
+    const dl = el("dl", "specs");
+    specRow(dl, T.specs.engine, engineTxt(c)); specRow(dl, T.specs.dsgType, tf(c, "dsgType"));
+    ["hu", "owners", "serviceHistory", "timingBelt", "dsgOil", "carplay", "camera", "colour"].forEach(k => specRow(dl, T.specs[k], tf(c, k)));
+    f.append(dl);
+    const eqAll = el("div", "eq"); Object.keys(T.eq).forEach(k => { if ((c.equip || {})[k]) eqAll.append(el("span", "on", T.eq[k])); }); f.append(eqAll);
+    if ((c.priceHistory || []).length > 1) f.append(el("div", "pricehist", T.priceHist + ": " + c.priceHistory.map(p => fmtDate(p.date) + " " + eur(p.price)).join(" → ")));
+    const links = el("div", "links");
+    if (isHttp(c.url)) { const a = el("a", "primary", T.listing); a.href = c.url; a.target = "_blank"; a.rel = "noopener"; links.append(a); }
+    if (isHttp(c.mapsUrl)) { const m = el("a", null, T.route); m.href = c.mapsUrl; m.target = "_blank"; m.rel = "noopener"; links.append(m); }
+    if (P.distance.preferTransit) { const b = el("a", null, T.train); b.href = transitUrl(c); b.target = "_blank"; b.rel = "noopener"; links.append(b); }
+    if (c.phone) { const b = el("button", "btn", T.copy); b.type = "button"; b.onclick = () => { try { navigator.clipboard.writeText(c.phone).then(() => { b.textContent = T.copied; setTimeout(() => b.textContent = T.copy, 1200); }); } catch (e) {} }; links.append(b); }
+    f.append(links); head.append(f); d.append(head);
+
+    const body = el("div", "dbody");
+    const left = el("div", "col");
+    if (c._crit.length) { const box = el("div", "crit"); box.append(el("strong", null, UX[lang].outside)); const ul = el("ul"); c._crit.forEach(r => { const li = el("li", null, critText(r)); if (r.key === "avoid" && r.def.reason[lang]) li.title = r.def.reason[lang]; ul.append(li); }); box.append(ul); left.append(box); }
+    if (tf(c, "verdict") || (tf(c, "pros") || []).length || (tf(c, "cons") || []).length) left.append(el("h3", null, T.take), el("p", "verdict", tf(c, "verdict") || ""));
+    const pc = el("div", "pc"); const plus = el("ul", "plus"); (tf(c, "pros") || []).forEach(p => plus.append(el("li", null, p))); const minus = el("ul", "minus"); (tf(c, "cons") || []).forEach(p => minus.append(el("li", null, p))); pc.append(plus, minus); left.append(pc);
+    if (c.rating) { const bars = el("div", "bars"); RATING_KEYS.forEach(k => { if (c.rating[k] == null || (k === "distance" && !tripMin(c))) return; const v = Math.max(0, Math.min(10, c.rating[k])); bars.append(el("span", "bl", T.rating[k === "distance" && !P.distance.preferTransit ? "distanceCar" : k])); const bt = el("div", "bt"); const bf = el("div", "bf"); bf.style.width = v * 10 + "%"; bf.style.background = v >= 7 ? "var(--good)" : v >= 5 ? "var(--warn)" : "var(--bad)"; bt.append(bf); bars.append(bt, el("span", "bv", v + "/10")); }); if (!tripMin(c)) bars.append(el("span", "bl", T.rating[P.distance.preferTransit ? "distance" : "distanceCar"]), el("span", "bv", "?")); left.append(bars); }
+    if (c.replyAssessment?.score != null) { const ra = c.replyAssessment; const box = el("div", "reply-assessment"); box.append(el("h3", null, `${UX[lang].reply}: ${ra.score}/10`), el("p", "verdict", ra.summary?.[lang] || ra.summary?.en || ""), el("small", null, UX[lang].replyHint)); left.append(box); }
+    const dr = tf(c, "docsReview"); if (dr) { const dd = el("details", "q"); dd.append(el("summary", null, T.docsReview)); dd.append(el("p", "verdict", dr)); left.append(dd); }
+    const qs = tf(c, "questions"); if (qs && qs.length) { const dq = el("details", "q"); dq.append(el("summary", null, T.questions + " (" + qs.length + ")")); const ol = el("ol"); qs.forEach(q => ol.append(el("li", null, q))); dq.append(ol); left.append(dq); }
+    body.append(left);
+    const right = el("div", "col"); right.append(el("h3", null, T.conv));
+    const tl = el("div", "timeline"); const msgs = [...(c.messages || [])].sort((a, b) => (a.date || "").localeCompare(b.date || ""));
+    if (!msgs.length) tl.append(el("p", "empty", T.noMsgs));
+    msgs.forEach(m => { const g = m.i18n && m.i18n[lang]; const text = !g ? m.text : (m.dir === "in" ? m.text + "\n\n(" + g + ")" : g); const mm = el("div", "msg " + (m.dir === "in" ? "in" : "out")); const meta = el("div", "meta"); const from = m.from && m.from === c.sellerName ? tf(c, "sellerName") : m.from; meta.innerHTML = `<span><b>${esc(from)}</b> · ${esc(m.via || "")}</span><span>${esc(fmtDate(m.date))}</span>`; mm.append(meta, el("div", "text", text)); tl.append(mm); });
+    right.append(tl);
+    const ctr = el("div", "controls"); const r2 = el("div", "row2");
+    const sW = el("div"); const sl = el("label", null, T.statusL); sl.htmlFor = "status-" + c.id; const ss = el("select"); ss.id = "status-" + c.id; Object.entries(T.status).forEach(([k, v]) => { const o = el("option", null, v); o.value = k; o.selected = k === c.status; ss.append(o); }); ss.onchange = () => save(c.id, { status: ss.value }, note); sW.append(sl, ss);
+    const nW = el("div"); const nl = el("label", null, T.next); nl.htmlFor = "next-" + c.id; const ni = el("input"); ni.id = "next-" + c.id; ni.value = c.nextStep || ""; ni.placeholder = T.nextPh; ni.onchange = () => save(c.id, { nextStep: ni.value }, note); nW.append(nl, ni);
+    r2.append(sW, nW); ctr.append(r2);
+    const noW = el("div"); const nol = el("label", null, T.notes); nol.htmlFor = "notes-" + c.id; const ta = el("textarea"); ta.id = "notes-" + c.id; ta.value = c.notes || ""; ta.placeholder = T.notesPh; ta.onchange = () => save(c.id, { notes: ta.value }, note); noW.append(nol, ta); ctr.append(noW);
+    const rb = el("button", "btn", openReply[c.id] ? T.cancel : T.logReply); rb.type = "button"; const form = el("div", "addreply" + (openReply[c.id] ? " open" : ""));
+    const fr = el("div", "row2"); const fW = el("div"); const fl = el("label", null, T.fromL); fl.htmlFor = "from-" + c.id; const fi = el("input"); fi.id = "from-" + c.id; fi.value = tf(c, "sellerName") || ""; fW.append(fl, fi);
+    const vW = el("div"); const vl = el("label", null, T.via); vl.htmlFor = "via-" + c.id; const vi = el("select"); vi.id = "via-" + c.id; T.vias.forEach(v => vi.append(el("option", null, v))); vW.append(vl, vi); fr.append(fW, vW);
+    const tW = el("div"); const txl = el("label", null, T.said); txl.htmlFor = "reply-" + c.id; const tx = el("textarea"); tx.id = "reply-" + c.id; tW.append(txl, tx);
+    const sb = el("button", "btn primary", T.add); sb.type = "button"; sb.onclick = () => { if (!tx.value.trim()) { tx.focus(); return; } const patch = { messages: [...(c.messages || []), { date: new Date().toISOString(), dir: "in", from: fi.value || c.sellerName, via: vi.value, text: tx.value.trim() }] }; if (c.status === "contacted") patch.status = "replied"; openReply[c.id] = false; save(c.id, patch, note); };
+    form.append(fr, tW, sb); rb.onclick = () => { openReply[c.id] = !openReply[c.id]; form.classList.toggle("open", openReply[c.id]); rb.textContent = openReply[c.id] ? T.cancel : T.logReply; if (openReply[c.id]) tx.focus(); };
+    const note = el("div", "saved");
+    const acts = el("div", "caractions");
+    const eb = el("button", "btn", T.editCar); eb.type = "button"; eb.onclick = () => Setup.editCar({ car: c, lang, onSaved: () => { expanded.add(c.id); load(); } });
+    const db = el("button", "btn danger", T.deleteCar); db.type = "button"; db.onclick = () => removeCar(c, note);
+    acts.append(eb, db);
+    ctr.append(rb, form, note, acts); right.append(ctr); body.append(right); d.append(body);
+    return d;
+  }
+  function renderList(list) {
+    const host = $("#cards"); host.innerHTML = "";
+    $("#count").textContent = list.length + " " + (list.length === 1 ? T.car : T.cars) + " " + ({ en: "shown", de: "angezeigt", pt: "exibidos" }[lang]) + " · " + cars.length + " " + ({ en: "tracked", de: "erfasst", pt: "registrados" }[lang]);
+    if (!cars.length) { host.append(el("p", "empty", T.loading)); return; }
+    if (!list.length) { host.append(el("p", "empty", T.noMatch)); return; }
+    list.forEach(c => host.append(card(c)));
+  }
+  function renderTable(list) {
+    const t = $("#cmp"); t.innerHTML = "";
+    const keys = ["title", "score", "price", "km", "kmyr", "year", "hp", "dsg", "drive", "seller", "belt", "carplay", "camera", "status"];
+    const val = (c, k) => k === "title" ? (c.displayTitle || c.title) : k === "kmyr" ? (kmPerYear(c) || 0) : k === "year" ? c.regYear * 100 + (c.regMonth || 1) : k === "dsg" ? gearboxLabel(c) : k === "drive" ? (tripMin(c) ?? 999) : k === "seller" ? (isDealer(c) ? 0 : 1) : k === "belt" ? (tf(c, "timingBelt") || "") : k === "carplay" ? ((c.equip || {}).carplay ? 1 : 0) : k === "camera" ? ((c.equip || {}).camera ? 1 : 0) : k === "status" ? (STATUS_RANK[c.status] ?? 5) : c[k];
+    const rows = costSelected.map(id => cars.find(c => c.id === id)).filter(Boolean).sort((a, b) => { const x = val(a, tableSort.k), y = val(b, tableSort.k); return (typeof x === "string" ? x.localeCompare(y) : (x ?? 0) - (y ?? 0)) * tableSort.dir; });
+    const thead = el("thead"); const hr = el("tr"); const numCols = [1, 2, 3, 4, 5, 6, 8];
+    T.cols.forEach((h, i) => { if (i === 8 && !P.distance.preferTransit) h = T.colDriveCar; const th = el("th", (numCols.includes(i) ? "num" : "") + (tableSort.k === keys[i] ? " sorted" : ""), h + (tableSort.k === keys[i] ? (tableSort.dir > 0 ? " ↑" : " ↓") : "")); th.onclick = () => { if (tableSort.k === keys[i]) tableSort.dir *= -1; else tableSort = { k: keys[i], dir: keys[i] === "score" ? -1 : 1 }; renderTable(visible()); }; hr.append(th); });
+    thead.append(hr); t.append(thead); const tb = el("tbody");
+    rows.forEach(c => { const tr = el("tr"); const td0 = el("td"); const a = el("a", null, c.displayTitle || c.title); a.href = "#car-" + c.id; a.onclick = e => { e.preventDefault(); openCar(c.id); }; td0.append(a); if (c.pick) td0.append(document.createTextNode(" ✓")); tr.append(td0);
+      const ts = el("td", "num"); ts.append(estTitle(el("span", "sc", scoreTxt(c)), c)); ts.firstChild.style.color = scoreColor(c.score); tr.append(ts);
+      const ky = kmPerYear(c);
+      tr.append(el("td", "num " + factCls("price", c.price), eur(c.price)), el("td", "num " + factCls("km", c.km), new Intl.NumberFormat(T.locale).format(c.km)), el("td", "num", ky ? new Intl.NumberFormat(T.locale).format(Math.round(ky / 1000) * 1000) : "–"), el("td", "num", String(c.regYear)), el("td", "num", c.hp ? String(c.hp) : "–"), el("td", null, gearboxLabel(c)), el("td", "num", tripMin(c) ? "~" + tripMin(c) + " " + T.min : "?"), el("td", null, tf(c, "sellerType")), el("td", null, tf(c, "timingBelt") || "?"), el("td", null, (c.equip || {}).carplay ? "✓" : "–"), el("td", null, (c.equip || {}).camera ? "✓" : "–"));
+      const tds = el("td"); tds.append(el("span", "pill s-" + c.status, T.status[c.status] || c.status)); tr.append(tds); tb.append(tr); });
+    t.append(tb);
+  }
+
+  function render() {
+    T = I18N[lang]; const list = visible(); renderHeader(); renderFilters(); renderWelcome();
+    if (!cars.length) return;
+    renderKpis(list); renderVisit(); renderDecision(list); renderMap(list); renderChart(list); renderUpdates(); renderCosts(list); renderList(list); renderTable(list);
+    $("#compare").hidden = !costSelected.some(id => cars.some(c => c.id === id));
+  }
+  document.querySelectorAll(".lang button").forEach(b => b.onclick = () => { lang = b.dataset.lang; try { localStorage.setItem("carhunt-lang", lang); } catch (e) {} if (P) render(); });
+
+  // ---------- saving ----------
+  let saving = Promise.resolve();
+  function save(id, patch, noteEl) {
+    saving = saving.then(() => fetch("/api/listings/" + encodeURIComponent(id), { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) }).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); }))
+      .then(j => { const i = cars.findIndex(c => c.id === id); if (i >= 0) cars[i] = toList({ [id]: j.car })[0]; render(); const n = noteEl && (document.querySelector(`#car-${CSS.escape(id)} .saved`) || noteEl); if (n) { n.textContent = T.saved; setTimeout(() => n.textContent = "", 1500); } })
+      .catch(e => { if (noteEl) noteEl.textContent = T.saveFail; });
+  }
+
+  function removeCar(c, noteEl) {
+    if (!confirm(T.confirmDelete(c.displayTitle || c.title || c.id))) return;
+    saving = saving.then(() => fetch("/api/listings/" + encodeURIComponent(c.id), { method: "DELETE" }).then(r => { if (!r.ok) throw new Error(r.status); }))
+      .then(() => {
+        expanded.delete(c.id); delete openReply[c.id]; delete openPhoto[c.id];
+        if (costSelected.includes(c.id)) { costSelected = costSelected.filter(x => x !== c.id); saveCosts(); }
+        if (location.hash === "#car-" + c.id) history.replaceState(null, "", location.pathname + location.search);
+        return load();
+      })
+      .catch(e => { if (noteEl) noteEl.textContent = T.saveFail; });
+  }
+
+  // ---------- load ----------
+  const toList = obj => Object.entries(obj || {}).map(([id, d]) => {
+    const c = { id, ...d };
+    const s = Criteria.scoreCar(c, P.weights); if (s != null) c.score = s;
+    // Cars without a routine assessment (e.g. added by hand) get a partial estimate from the listing data.
+    if (!c.rating && c.score == null) { const e = Criteria.scoreCar({ rating: Criteria.estimateRating(c, P) }, P.weights); if (e != null) { c.score = e; c.scoreEstimated = true; } }
+    c._crit = Criteria.checkCriteria(c, P, CAT);
+    return c;
+  });
+  async function load() {
+    try {
+      const rp = await fetch("/api/profile", { cache: "no-store" });
+      if (rp.status === 404) { document.body.classList.add("setup"); window.Setup && window.Setup.open({ mode: "wizard", lang, onSaved: () => location.reload() }); return; }
+      if (!rp.ok) throw new Error(rp.status);
+      P = await rp.json();
+      CAT = await (await fetch("drivetrains.json")).json();
+      if (!P.languages.includes(lang)) lang = P.languages[0];
+      initFilters();
+      if (!costPrefsStored) costPrefs.apr = P.money.finance.apr;
+      const [r1, r2] = await Promise.all([fetch("/api/listings", { cache: "no-store" }), fetch("/api/meta", { cache: "no-store" })]);
+      if (!r1.ok) throw new Error(r1.status);
+      cars = toList((await r1.json()).listings); if (r2.ok) meta = await r2.json(); api = true;
+      render();
+      if (location.hash.startsWith("#car-")) { const t = document.getElementById(location.hash.slice(1)); if (t) t.scrollIntoView({ block: "start" }); }
+      if (!window.__carhuntRefresh) window.__carhuntRefresh = setInterval(refresh, 60000);
+    } catch (e) { $("#cards").innerHTML = ""; $("#cards").append(el("p", "empty", T.loadFail)); }
+  }
+  async function refresh() { if (document.activeElement && document.activeElement.closest(".controls")) return; try { const [r1, r2] = await Promise.all([fetch("/api/listings", { cache: "no-store" }), fetch("/api/meta", { cache: "no-store" })]); if (r1.ok) { cars = toList((await r1.json()).listings); if (r2.ok) meta = await r2.json(); render(); } } catch (e) {} }
+  load();
+  window.CarHunt = { profile: () => P, catalogue: () => CAT, lang: () => lang, reload: () => load() };
+  // Remember this visit for the "new since" badge, but only after the data arrived once.
+  setTimeout(() => { try { if (cars.length) localStorage.setItem("carhunt-lastvisit", lastVisit ? lastVisit : new Date().toISOString()); } catch (e) {} }, 4000);
+})();
+</script>
+</body>
+</html>

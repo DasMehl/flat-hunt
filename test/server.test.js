@@ -118,7 +118,7 @@ test("manual add geocodes the town and computes the drive", async () => {
     await fetch(s.base + "/api/profile", { method: "PUT", headers: json(s.auth), body: JSON.stringify(homeProfile()) });
     const r = await fetch(s.base + "/api/listings", { method: "POST", headers: json(s.auth), body: JSON.stringify(newCar) });
     assert.equal(r.status, 201);
-    const { id, car } = await r.json();
+    const { id, listing: car } = await r.json();
     assert.equal(id, "vw-golf-7-variant-2-0-tdi-45127-essen");
     assert.equal(car.driveMin, 32);
     assert.equal(car.roadKm, 36);
@@ -134,7 +134,7 @@ test("manual add still saves when geocoding fails, and validates input", async (
     await fetch(s.base + "/api/profile", { method: "PUT", headers: json(s.auth), body: JSON.stringify(homeProfile()) });
     const r = await fetch(s.base + "/api/listings", { method: "POST", headers: json(s.auth), body: JSON.stringify(newCar) });
     assert.equal(r.status, 201);
-    assert.equal((await r.json()).car.driveMin, undefined);
+    assert.equal((await r.json()).listing.driveMin, undefined);
     const bad = await fetch(s.base + "/api/listings", { method: "POST", headers: json(s.auth), body: JSON.stringify({ ...newCar, price: "cheap", url: "javascript:alert(1)" }) });
     assert.equal(bad.status, 400);
     assert.equal((await bad.json()).details.length, 2);
@@ -196,7 +196,7 @@ test("a profile name outside Latin-1 still gives a 401 with a password prompt", 
 test("sync with complete: true never marks a manually added car gone", async () => {
   const s = await start({ fetchImpl: failFetch });
   try {
-    const { id, car } = await (await fetch(s.base + "/api/listings", { method: "POST", headers: json(s.auth), body: JSON.stringify(newCar) })).json();
+    const { id, listing: car } = await (await fetch(s.base + "/api/listings", { method: "POST", headers: json(s.auth), body: JSON.stringify(newCar) })).json();
     assert.equal(car.source, "manual");
     await fetch(s.base + "/api/listings/routine-car", { method: "PUT", headers: s.sync, body: JSON.stringify({ title: "Routine car", price: 9000 }) });
     const r = await fetch(s.base + "/api/sync", { method: "POST", headers: s.sync, body: JSON.stringify({ seen: {}, complete: true }) });
@@ -204,6 +204,25 @@ test("sync with complete: true never marks a manually added car gone", async () 
     const cars = (await (await fetch(s.base + "/api/listings", { headers: s.auth })).json()).listings;
     assert.notEqual(cars[id].gone, true);
     assert.equal(cars["routine-car"].gone, true);
+  } finally { await s.close(); }
+});
+
+test("sync with complete: true marks only open listings gone", async () => {
+  const s = await start({ fetchImpl: failFetch });
+  try {
+    const put = (id, body) => fetch(s.base + "/api/listings/" + id, { method: "PUT", headers: s.sync, body: JSON.stringify({ title: id, price: 900, ...body }) });
+    for (const id of ["rejected", "dropped", "accepted", "contacted", "wasgone"]) assert.equal((await put(id, id === "wasgone" ? { gone: true } : {})).status, 200);
+    for (const id of ["rejected", "dropped", "accepted", "contacted"]) {
+      const r = await fetch(s.base + "/api/listings/" + id, { method: "PATCH", headers: json(s.auth), body: JSON.stringify({ status: id }) });
+      assert.equal(r.status, 200, id);
+    }
+    const r = await fetch(s.base + "/api/sync", { method: "POST", headers: s.sync, body: JSON.stringify({ seen: {}, complete: true }) });
+    assert.equal(r.status, 200);
+    const l = (await (await fetch(s.base + "/api/listings", { headers: s.auth })).json()).listings;
+    assert.equal(l.contacted.gone, true);
+    for (const id of ["rejected", "dropped", "accepted"]) assert.notEqual(l[id].gone, true, id);
+    assert.equal(l.wasgone.goneAt, undefined);
+    assert.deepEqual((await r.json()).changes.map(c => c.id), ["contacted"]);
   } finally { await s.close(); }
 });
 
@@ -227,12 +246,12 @@ test("PUT /api/meta accepts only lastCheck", async () => {
 test("manual add without regMonth or hp stores null", async () => {
   const s = await start({ fetchImpl: failFetch });
   try {
-    const { car } = await (await fetch(s.base + "/api/listings", { method: "POST", headers: json(s.auth), body: JSON.stringify(newCar) })).json();
+    const { listing: car } = await (await fetch(s.base + "/api/listings", { method: "POST", headers: json(s.auth), body: JSON.stringify(newCar) })).json();
     assert.equal(car.regMonth, null);
     assert.equal(car.hp, null);
     assert.equal(car.negotiable, false);
     const neg = await (await fetch(s.base + "/api/listings", { method: "POST", headers: json(s.auth), body: JSON.stringify({ ...newCar, negotiable: true }) })).json();
-    assert.equal(neg.car.negotiable, true);
+    assert.equal(neg.listing.negotiable, true);
   } finally { await s.close(); }
 });
 
@@ -277,7 +296,7 @@ test("editing the price appends to the price history and logs the change", async
     const { id } = await addManual(s);
     const r = await editListing(s, id, { price: 9400 });
     assert.equal(r.status, 200);
-    const { ok, car } = await r.json();
+    const { ok, listing: car } = await r.json();
     assert.equal(ok, true);
     assert.equal(car.price, 9400);
     assert.deepEqual(car.priceHistory.map(p => p.price), [9900, 9400]);
@@ -295,7 +314,7 @@ test("editing the title updates displayTitle and, for manual cars, the model", a
   const s = await start({ fetchImpl: failFetch });
   try {
     const { id } = await addManual(s);
-    const { car } = await (await editListing(s, id, { title: "Skoda Octavia Combi", regYear: 2017, regMonth: 5, hp: null, negotiable: true })).json();
+    const { listing: car } = await (await editListing(s, id, { title: "Skoda Octavia Combi", regYear: 2017, regMonth: 5, hp: null, negotiable: true })).json();
     assert.equal(car.title, "Skoda Octavia Combi");
     assert.equal(car.displayTitle, "Skoda Octavia Combi · 2017");
     assert.equal(car.model, "Skoda Octavia Combi");
@@ -303,9 +322,9 @@ test("editing the title updates displayTitle and, for manual cars, the model", a
     assert.equal(car.hp, null);
     assert.equal(car.negotiable, true);
     await fetch(s.base + "/api/listings/routine-car", { method: "PUT", headers: s.sync, body: JSON.stringify({ title: "Routine car", displayTitle: "Routine · special", model: "Golf", regYear: 2018, price: 9000 }) });
-    const kept = (await (await editListing(s, "routine-car", { km: 120000 })).json()).car;
+    const kept = (await (await editListing(s, "routine-car", { km: 120000 })).json()).listing;
     assert.equal(kept.displayTitle, "Routine · special");
-    const renamed = (await (await editListing(s, "routine-car", { title: "Renamed" })).json()).car;
+    const renamed = (await (await editListing(s, "routine-car", { title: "Renamed" })).json()).listing;
     assert.equal(renamed.displayTitle, "Renamed · 2018");
     assert.equal(renamed.model, "Golf");
   } finally { await s.close(); }
@@ -316,11 +335,11 @@ test("editing the town re-geocodes and recomputes the drive", async () => {
   const s = await start({ fetchImpl: (...a) => impl(...a) });
   try {
     await fetch(s.base + "/api/profile", { method: "PUT", headers: json(s.auth), body: JSON.stringify(homeProfile()) });
-    const { id, car: before } = await addManual(s);
+    const { id, listing: before } = await addManual(s);
     assert.equal(before.driveMin, 32);
     await fetch(s.base + "/api/listings/" + id, { method: "PUT", headers: s.sync, body: JSON.stringify({ transitMin: 50, transitCheckedAt: "2026-10-18" }) });
     impl = otherTownFetch;
-    const { car } = await (await editListing(s, id, { town: "50667 Köln" })).json();
+    const { listing: car } = await (await editListing(s, id, { town: "50667 Köln" })).json();
     assert.equal(car.location, "50667 Köln");
     assert.equal(car.city, "50667 Köln");
     assert.equal(car.lat, 50.9384);
@@ -342,7 +361,7 @@ test("editing the town when geocoding fails keeps the town and clears the old di
     impl = failFetch;
     const r = await editListing(s, id, { town: "Nowhere" });
     assert.equal(r.status, 200);
-    const { car } = await r.json();
+    const { listing: car } = await r.json();
     assert.equal(car.location, "Nowhere");
     assert.equal(car.city, "Nowhere");
     for (const k of ["lat", "lon", "roadKm", "driveMin", "mapsUrl", "transitMin", "transitCheckedAt"]) assert.equal(car[k], undefined, k);
@@ -359,7 +378,7 @@ test("listing edits reject unknown fields, invalid values, unknown cars and miss
     const bad = await editListing(s, id, { price: "cheap", url: "http://insecure.example/x", regMonth: 13, negotiable: "yes", fuel: "steam" });
     assert.equal(bad.status, 400);
     const j = await bad.json();
-    assert.equal(j.error, "invalid car");
+    assert.equal(j.error, "invalid listing");
     assert.equal(j.details.length, 5);
     assert.equal((await editListing(s, "no-such-car", { price: 1000 })).status, 404);
     assert.equal((await editListing(s, id, { price: 1000 }, { "Content-Type": "application/json" })).status, 401);

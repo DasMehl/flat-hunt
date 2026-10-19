@@ -87,7 +87,7 @@ function createApp(options = {}) {
     catch (e) { res.status(500).json({ error: "save failed" }); }
   });
 
-  // Validates listing facts as the add-car dialog sends them. With partial, every field is optional
+  // Validates listing facts as the add-listing dialog sends them. With partial, every field is optional
   // and only the ones present are checked (PATCH /api/listings/:id/listing).
   function checkListing(b, partial) {
     const errors = [], has = k => !partial || k in b;
@@ -131,7 +131,7 @@ function createApp(options = {}) {
 
   app.post("/api/listings", async (req, res) => {
     const b = req.body || {}, errors = checkListing(b);
-    if (errors.length) return res.status(400).json({ error: "invalid car", details: errors });
+    if (errors.length) return res.status(400).json({ error: "invalid listing", details: errors });
 
     const d = today();
     const car = {
@@ -142,7 +142,7 @@ function createApp(options = {}) {
     };
     Object.assign(car, await locate(b.town));
     // Id is chosen and stored synchronously, after the last await, so concurrent adds cannot share one.
-    let id = slug(b.title + " " + b.town) || "car";
+    let id = slug(b.title + " " + b.town) || "listing";
     if (state.listings[id]) { let i = 2; while (state.listings[`${id}-${i}`]) i++; id = `${id}-${i}`; }
     state.listings[id] = car;
     const entry = { date: d, type: "new", id, text: car.displayTitle, price: car.price };
@@ -154,7 +154,7 @@ function createApp(options = {}) {
       if (at >= 0) state.meta.log.splice(at, 1);
       return res.status(500).json({ error: "save failed" });
     }
-    res.status(201).json({ ok: true, id, car });
+    res.status(201).json({ ok: true, id, listing: car });
   });
 
   app.put("/api/img/:name", requireKey, express.raw({ type: ["image/jpeg", "image/png", "image/webp"], limit: "5mb" }), async (req, res) => {
@@ -169,7 +169,7 @@ function createApp(options = {}) {
 
   app.patch("/api/listings/:id", async (req, res) => {
     const c = state.listings[req.params.id];
-    if (!c) return res.status(404).json({ error: "unknown car" });
+    if (!c) return res.status(404).json({ error: "unknown listing" });
     const p = req.body;
     if (!p || typeof p !== "object" || Array.isArray(p)) return res.status(400).json({ error: "invalid update" });
     const allowed = ["status", "nextStep", "notes", "pick", "messages"];
@@ -179,24 +179,24 @@ function createApp(options = {}) {
     if ("pick" in p && typeof p.pick !== "boolean") return res.status(400).json({ error: "invalid pick" });
     if ("messages" in p && (!Array.isArray(p.messages) || p.messages.length > 200 || p.messages.some(m => !m || typeof m !== "object" || typeof m.text !== "string" || m.text.length > 10000))) return res.status(400).json({ error: "invalid messages" });
     for (const k of allowed) if (k in p) c[k] = p[k];
-    try { await persist(); res.json({ ok: true, car: c }); } catch (e) { res.status(500).json({ error: "save failed" }); }
+    try { await persist(); res.json({ ok: true, listing: c }); } catch (e) { res.status(500).json({ error: "save failed" }); }
   });
 
   const EDITABLE = ["url", "title", "price", "km", "regYear", "regMonth", "hp", "fuel", "gearbox", "town", "negotiable"];
-  // Fields that describe where the car is; a new town makes all of them stale.
+  // Fields that describe where the listing is; a new town makes all of them stale.
   const PLACE_FIELDS = ["lat", "lon", "roadKm", "driveMin", "mapsUrl", "distanceKm", "airKm", "transitMin", "transitCheckedAt", "transitSource", "transitDestination", "transitApproximate", "bahnUrl"];
 
   app.patch("/api/listings/:id/listing", async (req, res) => {
     const id = req.params.id, p = req.body;
-    if (!state.listings[id]) return res.status(404).json({ error: "unknown car" });
+    if (!state.listings[id]) return res.status(404).json({ error: "unknown listing" });
     if (!p || typeof p !== "object" || Array.isArray(p)) return res.status(400).json({ error: "invalid update" });
     if (Object.keys(p).some(k => !EDITABLE.includes(k))) return res.status(400).json({ error: "unsupported field" });
     const errors = checkListing(p, true);
-    if (errors.length) return res.status(400).json({ error: "invalid car", details: errors });
+    if (errors.length) return res.status(400).json({ error: "invalid listing", details: errors });
     const place = "town" in p ? await locate(p.town.trim()) : null;
     // Everything below runs without awaiting, so a concurrent delete or edit cannot interleave.
     const c = state.listings[id];
-    if (!c) return res.status(404).json({ error: "unknown car" });
+    if (!c) return res.status(404).json({ error: "unknown listing" });
     const prev = structuredClone(c), d = today();
     const manual = c.source === "manual";
     for (const k of ["url", "km", "regYear", "regMonth", "hp", "fuel", "negotiable"]) if (k in p) c[k] = p[k];
@@ -222,12 +222,12 @@ function createApp(options = {}) {
       if (at >= 0) state.meta.log.splice(at, 1);
       return res.status(500).json({ error: "save failed" });
     }
-    res.json({ ok: true, car: c });
+    res.json({ ok: true, listing: c });
   });
 
   app.delete("/api/listings/:id", async (req, res) => {
     const id = req.params.id, c = state.listings[id];
-    if (!c) return res.status(404).json({ error: "unknown car" });
+    if (!c) return res.status(404).json({ error: "unknown listing" });
     const log = state.meta.log;
     delete state.listings[id];
     state.meta.log = log.filter(e => e.id !== id);
@@ -237,14 +237,14 @@ function createApp(options = {}) {
       if (state.meta.log.every(e => e.id !== id)) state.meta.log = [...state.meta.log, ...log.filter(e => e.id === id)].sort((a, b) => log.indexOf(a) - log.indexOf(b));
       return res.status(500).json({ error: "save failed" });
     }
-    // Photos are named <id>-N; skip files of another car whose id itself starts with "<id>-".
+    // Photos are named <id>-N; skip files of another listing whose id itself starts with "<id>-".
     const img = path.join(dataDir, "img"), others = Object.keys(state.listings).filter(o => o.startsWith(id + "-"));
     try {
       for (const f of await fs.promises.readdir(img)) {
         if (!f.startsWith(id + "-") || others.some(o => f.startsWith(o + "-"))) continue;
         await fs.promises.unlink(path.join(img, f)).catch(() => {});
       }
-    } catch (e) { /* photos stay behind; the car is gone */ }
+    } catch (e) { /* photos stay behind; the listing is gone */ }
     res.json({ ok: true });
   });
 

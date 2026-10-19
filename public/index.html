@@ -968,7 +968,7 @@ body.setup .wrap{display:none}
   let saving = Promise.resolve();
   function save(id, patch, noteEl) {
     saving = saving.then(() => fetch("/api/listings/" + encodeURIComponent(id), { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) }).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); }))
-      .then(j => { const i = cars.findIndex(c => c.id === id); if (i >= 0) cars[i] = toList({ [id]: j.car })[0]; render(); const n = noteEl && (document.querySelector(`#car-${CSS.escape(id)} .saved`) || noteEl); if (n) { n.textContent = T.saved; setTimeout(() => n.textContent = "", 1500); } })
+      .then(j => { const i = cars.findIndex(c => c.id === id); if (i >= 0) cars[i] = toList({ [id]: j.listing })[0]; render(); const n = noteEl && (document.querySelector(`#car-${CSS.escape(id)} .saved`) || noteEl); if (n) { n.textContent = T.saved; setTimeout(() => n.textContent = "", 1500); } })
       .catch(e => { if (noteEl) noteEl.textContent = T.saveFail; });
   }
 

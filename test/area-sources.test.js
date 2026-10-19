@@ -81,3 +81,51 @@ test("parseFlood lists the scenarios the point lies in, worst first; an empty an
   assert.throws(() => parseFlood({ error: { code: 500 } }), /unexpected/);
   assert.deepEqual((await floodAt(KOE, recorder({ results: [hit("medium")] }), noWait)).zones, ["medium"]);
 });
+
+const status = (code, headers = {}) => ({ ok: false, status: code, headers: { get: k => headers[k] ?? null }, text: async () => "" });
+const seq = (...rs) => { let i = 0; const f = async () => { const r = rs[Math.min(i++, rs.length - 1)]; return typeof r === "function" ? r() : r; }; f.calls = () => i; return f; };
+const raw = text => ({ ok: true, status: 200, headers: { get: () => null }, text: async () => text });
+const KBODY = { features: [{ properties: { ags: "05111", gen: "Düsseldorf", bez: "Kreisfreie Stadt" } }] };
+
+test("lookupKreis retries a 503, rejects garbage, returns null for an empty answer", async () => {
+  const f = seq(status(503), ok(KBODY));
+  assert.equal((await lookupKreis(KOE, f, { delays: [1], sleep: async () => {} })).ags, "05111");
+  assert.equal(f.calls(), 2);
+  await assert.rejects(lookupKreis(KOE, seq(raw("<html>nope")), noWait));
+  assert.equal(await lookupKreis(KOE, seq(ok({ features: [] })), noWait), null);
+});
+
+test("floodAt retries a 502, rejects garbage and ArcGIS error objects", async () => {
+  const hit = { results: [{ attributes: { LikelihoodOfOccurrence: "high", NaturalHazardCategory: "flood" } }] };
+  const f = seq(status(502), ok(hit));
+  assert.deepEqual((await floodAt(KOE, f, { delays: [1], sleep: async () => {} })).zones, ["high"]);
+  assert.equal(f.calls(), 2);
+  await assert.rejects(floodAt(KOE, seq(raw("not json")), noWait));
+  await assert.rejects(floodAt(KOE, seq(ok({ error: { code: 500 } })), noWait), /unexpected/);
+});
+
+test("bad coordinates are refused before any URL, filter or grid lookup", async () => {
+  for (const [la, lo] of [["1</gml:pos><x/>", "2"], [NaN, 6], [51, Infinity], [10, 6], [51, 30], [null, null], [undefined, 6]]) {
+    assert.throws(() => kreisUrl(la, lo), /bad coordinates/);
+    assert.throws(() => floodUrl(la, lo), /bad coordinates/);
+  }
+  const f = recorder(KBODY);
+  await assert.rejects(lookupKreis({ lat: NaN, lon: 6 }, f, noWait), /bad coordinates/);
+  assert.equal(f.urls.length, 0);
+  const g = createRentGrid({ x0: 0, y0: 0, width: 1, height: 1 }, Buffer.alloc(2));
+  assert.equal(g.at(NaN, 6), null);
+  assert.equal(g.at(undefined, undefined), null);
+});
+
+test("an unclassified flood result counts as zone unknown, not as no data", () => {
+  const r = a => ({ attributes: { NaturalHazardCategory: "flood", ...a } });
+  assert.deepEqual(parseFlood({ results: [r({})] }).zones, ["unknown"]);
+  assert.deepEqual(parseFlood({ results: [r({ LikelihoodOfOccurrence: "weird" }), r({ LikelihoodOfOccurrence: "medium" })] }).zones, ["medium", "unknown"]);
+});
+
+test("the crime table and rent grid are loaded once per process", () => {
+  const crime = require("../lib/crime"), rent = require("../lib/rent-grid");
+  crime.reload(); rent.reload();
+  assert.equal(crime.loadCrimeTable(), crime.loadCrimeTable());
+  assert.equal(rent.loadRentGrid(), rent.loadRentGrid());
+});

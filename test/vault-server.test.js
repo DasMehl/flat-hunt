@@ -9,6 +9,8 @@ const { start, TEST_VAULT_KEY, OTHER_VAULT_KEY } = require("./helpers");
 const json = (h = {}) => ({ ...h, "Content-Type": "application/json" });
 const withVault = (o = {}) => start({ vaultKey: TEST_VAULT_KEY, ...o });
 const runServer = env => spawnSync(process.execPath, [path.join(__dirname, "..", "server.js")], { env: { PATH: process.env.PATH, PORT: "0", SITE_PASSWORD: "pw", ...env }, timeout: 1500, encoding: "utf8" });
+const { defaultApplicant } = require("../lib/applicant");
+const applicant = () => ({ ...defaultApplicant(), name: "Alex Example", email: "alex@example.com", job: { title: "Engineer", employer: "Example GmbH", since: "2022-04", permanent: true } });
 
 // ---------- Task 1: key and start-up ----------
 test("without VAULT_KEY the vault routes answer 503 and the status says off", async () => {
@@ -82,4 +84,43 @@ test("the server refuses to start when the vault cannot be read", { skip: proces
     assert.equal(r.status, 1);
     assert.match(r.stderr, /cannot be read/);
   } finally { fs.chmodSync(f, 0o600); }
+});
+
+// ---------- Task 2: applicant ----------
+test("applicant: 404 first, validated PUT, stored encrypted, survives a restart", async () => {
+  const s = await withVault();
+  try {
+    assert.equal((await fetch(s.base + "/api/applicant", { headers: s.auth })).status, 404);
+    const badPut = await fetch(s.base + "/api/applicant", { method: "PUT", headers: json(s.auth), body: JSON.stringify({ ...applicant(), iban: "x" }) });
+    assert.equal(badPut.status, 400);
+    assert.deepEqual((await badPut.json()).details, ["iban: unknown field"]);
+    const put = await fetch(s.base + "/api/applicant", { method: "PUT", headers: json(s.auth), body: JSON.stringify(applicant()) });
+    assert.equal(put.status, 200);
+    assert.equal((await put.json()).applicant.name, "Alex Example");
+    const raw = fs.readFileSync(path.join(s.dir, "vault", "applicant.json"));
+    assert.ok(!raw.includes("Alex Example"));
+  } finally { await s.close(); }
+  const again = await withVault({ dataDir: s.dir });
+  try { assert.equal((await (await fetch(again.base + "/api/applicant", { headers: again.auth })).json()).applicant.job.employer, "Example GmbH"); }
+  finally { await again.close(); }
+});
+
+test("applicant: a failed save answers 500 and keeps the previous applicant", async () => {
+  const s = await withVault();
+  try {
+    await fetch(s.base + "/api/applicant", { method: "PUT", headers: json(s.auth), body: JSON.stringify(applicant()) });
+    fs.rmSync(path.join(s.dir, "vault", "applicant.json"));
+    fs.mkdirSync(path.join(s.dir, "vault", "applicant.json"));
+    const r = await fetch(s.base + "/api/applicant", { method: "PUT", headers: json(s.auth), body: JSON.stringify({ ...applicant(), name: "Someone Else" }) });
+    assert.equal(r.status, 500);
+    assert.equal((await (await fetch(s.base + "/api/applicant", { headers: s.auth })).json()).applicant.name, "Alex Example");
+  } finally { await s.close(); }
+});
+
+test("vault and applicant routes need the password", async () => {
+  const s = await withVault();
+  try {
+    for (const [m, p] of [["GET", "/api/applicant"], ["PUT", "/api/applicant"], ["GET", "/api/vault"], ["POST", "/api/vault"], ["GET", "/api/vault/status"], ["GET", "/api/applicant/summary.pdf"], ["DELETE", "/api/shares/x"], ["POST", "/api/listings/x/doc-requests"], ["POST", "/api/listings/x/shares"], ["GET", "/api/listings/x/shares"]])
+      assert.equal((await fetch(s.base + p, { method: m })).status, 401, m + " " + p);
+  } finally { await s.close(); }
 });

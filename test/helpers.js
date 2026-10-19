@@ -5,7 +5,7 @@ const { createApp } = require("../server");
 
 async function start(options = {}) {
   const dir = options.dataDir || fs.mkdtempSync(path.join(os.tmpdir(), "flat-hunt-test-"));
-  const app = createApp({ dataDir: dir, password: "pw", syncKey: "key", ...options });
+  const app = createApp({ dataDir: dir, password: "pw", syncKey: "key", vaultKey: "", ...options });
   const server = await new Promise(resolve => { const s = app.listen(0, "127.0.0.1", () => resolve(s)); });
   const base = `http://127.0.0.1:${server.address().port}`;
   const auth = { Authorization: "Basic " + Buffer.from("u:pw").toString("base64") };
@@ -13,4 +13,8 @@ async function start(options = {}) {
   return { base, auth, sync, dir, close: () => new Promise(r => server.close(r)) };
 }
 
-module.exports = { start };
+// Test-only vault keys (bytes 0..31 and 31..0), never used outside tests.
+const TEST_VAULT_KEY = "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=";
+const OTHER_VAULT_KEY = "Hx4dHBsaGRgXFhUUExIREA8ODQwLCgkIBwYFBAMCAQA=";
+
+module.exports = { start, TEST_VAULT_KEY, OTHER_VAULT_KEY };

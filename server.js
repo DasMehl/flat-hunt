@@ -9,6 +9,8 @@ const { geocode } = require("./lib/geo");
 const { commuteFor } = require("./lib/commute");
 const { validateListingInput, requiredErrors } = require("./lib/listing");
 const { warmRent } = require("./public/money");
+const { parseVaultKey, vaultStatus, openVault } = require("./lib/vault");
+const { vaultApi } = require("./lib/vault-api");
 
 const STATUSES = ["new", "contacted", "viewing-invited", "viewing-done", "applied", "docs-requested", "accepted", "rejected", "dropped", "gone"];
 // Fields the routine may write with the sync key (PUT /api/listings/:id). Owner fields stay page-only.
@@ -26,6 +28,12 @@ function createApp(options = {}) {
   const seedFile = options.seedFile || path.join(__dirname, "seed.json");
   const files = { listings: path.join(dataDir, "listings.json"), meta: path.join(dataDir, "meta.json"), profile: path.join(dataDir, "profile.json") };
   fs.mkdirSync(path.join(dataDir, "img"), { recursive: true });
+  const now = options.now || (() => new Date());
+  // The vault opens only with the right key; otherwise its routes answer 503 (the start-up check refuses to run in that case).
+  const vaultText = options.vaultKey ?? process.env.VAULT_KEY ?? "";
+  const vaultKey = vaultText ? parseVaultKey(vaultText) : null;
+  const vStatus = vaultStatus(dataDir, vaultKey);
+  const vault = vaultKey && (vStatus === "ok" || vStatus === "empty") ? openVault(dataDir, vaultKey) : null;
 
   const state = {
     listings: readJson(files.listings, null),
@@ -50,6 +58,7 @@ function createApp(options = {}) {
   app.locals.files = files;
   app.locals.persist = persist;
   app.locals.fetchImpl = options.fetchImpl || globalThis.fetch;
+  app.locals.vault = vault;
   app.disable("x-powered-by");
   app.use(express.json({ limit: "4mb" }));
   app.use((req, res, next) => {
@@ -79,6 +88,7 @@ function createApp(options = {}) {
     next();
   };
   app.locals.requireKey = requireKey;
+  app.use(vaultApi({ state, vault, vaultStatus: vault ? "ready" : vStatus === "empty" ? "off" : vStatus, persist, persistShares: null, now }));
 
   app.get("/api/listings", (req, res) => res.json({ listings: state.listings, updatedAt: new Date().toISOString() }));
 
@@ -391,6 +401,13 @@ if (require.main === module) {
     }
     console.warn("Warning: ALLOW_OPEN=1 and no SITE_PASSWORD: anyone who can reach this server can see and edit the hunt.");
   }
+  let vaultKey = null;
+  try { vaultKey = process.env.VAULT_KEY ? parseVaultKey(process.env.VAULT_KEY) : null; }
+  catch (e) { console.error(e.message); process.exit(1); }
+  const vs = vaultStatus(process.env.DATA_DIR || path.join(__dirname, "data"), vaultKey);
+  if (vs === "missing-key") { console.error("The document vault (DATA_DIR/vault) holds data but VAULT_KEY is not set. Set the VAULT_KEY it was created with; without it the documents cannot be read."); process.exit(1); }
+  if (vs === "wrong-key") { console.error("VAULT_KEY does not open the document vault (DATA_DIR/vault). Set the VAULT_KEY it was created with."); process.exit(1); }
+  if (!vaultKey) console.warn("VAULT_KEY is not set: the applicant profile, documents and share links are off.");
   const port = process.env.PORT || 3000;
   const app = createApp();
   const profile = app.locals.state.profile;

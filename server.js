@@ -9,6 +9,7 @@ const { geocode } = require("./lib/geo");
 const { commuteFor } = require("./lib/commute");
 const { validateListingInput, requiredErrors } = require("./lib/listing");
 const { warmRent } = require("./public/money");
+const { headline, historyEntry, applySeen } = require("./lib/price-sync");
 const { parseVaultKey, vaultStatus, openVault } = require("./lib/vault");
 const { vaultApi } = require("./lib/vault-api");
 const { computeArea } = require("./lib/area");
@@ -188,8 +189,6 @@ function createApp(options = {}) {
 
   // Geocoding query from the address fields: "street, postcode city", any part may be missing.
   const placeQuery = l => [l.address, [l.postcode, l.city].filter(Boolean).join(" ")].filter(Boolean).join(", ");
-  // The amount a listing is tracked by: purchase price when buying, warm (else cold) rent when renting.
-  const headline = l => l.mode === "buy" ? l.price ?? null : warmRent(l) ?? l.coldRent ?? null;
   // Copies validated input onto a listing; null clears a field. Contact name and type live in listing.contact.
   function applyInput(l, v) {
     for (const [k, x] of Object.entries(v)) {
@@ -212,8 +211,6 @@ function createApp(options = {}) {
       else if (oldWarm != null && oldWarm === oldSum) delete l.warmRent;
     }
   }
-  // A price-history entry; rent entries also keep the cold rent.
-  const historyEntry = (l, date) => l.mode === "rent" && l.coldRent != null ? { date, price: headline(l), coldRent: l.coldRent } : { date, price: headline(l) };
 
   const slug = s => String(s).normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/ß/g, "ss").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 70);
 
@@ -414,7 +411,8 @@ function createApp(options = {}) {
       if (s) {
         c.lastSeenAt = d;
         if (c.gone) { c.gone = false; changes.push({ date: d, type: "back", id, text: c.title }); }
-        if (s.price && s.price !== c.price) { c.priceHistory = [...(c.priceHistory || []), { date: d, price: s.price }]; changes.push({ date: d, type: "price", id, text: c.title, from: c.price, to: s.price }); c.price = s.price; }
+        const change = applySeen(c, s, id, d);
+        if (change) changes.push(change);
       } else if (req.body.complete && c.source !== "manual" && !c.gone && !["rejected", "dropped", "accepted", "gone"].includes(c.status)) {
         c.gone = true; c.goneAt = d; changes.push({ date: d, type: "gone", id, text: c.title });
       }

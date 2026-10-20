@@ -24,6 +24,7 @@ const { OVERPASS_URL } = require("./lib/amenities");
 const { accessGate, requireSyncKey } = require("./lib/routine-auth");
 const { normaliseOutreach, prune: pruneClaims } = require("./lib/outreach");
 const { outreachApi } = require("./lib/outreach-api");
+const { repliesApi } = require("./lib/replies-api");
 const { createRateLimiter } = require("./lib/ratelimit");
 const CATALOGUE = require("./public/redflags.json");
 
@@ -137,6 +138,7 @@ function createApp(options = {}) {
   // Claims, "sent" reports and replies from the routine share one limit (default 60 a minute).
   const routineLimiter = createRateLimiter({ limit: 60, windowMs: 60000, ...(options.routineRateLimit || {}) });
   app.use(outreachApi({ state, vault, persist, persistOutreach, saveProfile: v => writeJsonAtomic(files.profile, v), now, catalogue: CATALOGUE, requireKey, limiter: routineLimiter }));
+  app.use(repliesApi({ state, persist, now, requireKey, limiter: routineLimiter }));
 
   app.get("/api/listings", (req, res) => res.json({ listings: state.listings, updatedAt: new Date().toISOString() }));
 

@@ -18,7 +18,7 @@
       },
       approved: (d, v) => `Approved ${d} · version ${v}`, notApproved: v => `Not approved · version ${v}`,
       placeholders: "Placeholders (click to insert)", save: "Save text", saved: "Saved", preview: "Preview", approve: "Approve this version", withdraw: "Withdraw approval",
-      saveFirst: "Save the text first, then approve it.", previewExample: "Preview with an example listing and your applicant profile.",
+      saveFirst: "Save the text first, then approve it.", discardConfirm: "Discard your unsaved changes to this text?", previewExample: "Preview with an example listing and your applicant profile.",
       missing: list => `Missing for sending: ${list}. Fill them in under About me or Settings; until then the routine skips this template.`,
       failed: "Could not save", netFail: "Could not reach the server.", changedMeanwhile: "The template changed meanwhile; reload Settings.",
       sendOn: "Sending on", sendPaused: "Sending paused", sentToday: (n, cap) => `${n}/${cap} today`,
@@ -44,7 +44,7 @@
       },
       approved: (d, v) => `Freigegeben am ${d} · Version ${v}`, notApproved: v => `Nicht freigegeben · Version ${v}`,
       placeholders: "Platzhalter (zum Einfügen klicken)", save: "Text speichern", saved: "Gespeichert", preview: "Vorschau", approve: "Diese Version freigeben", withdraw: "Freigabe aufheben",
-      saveFirst: "Erst den Text speichern, dann freigeben.", previewExample: "Vorschau mit einer Beispielanzeige und deinem Bewerberprofil.",
+      saveFirst: "Erst den Text speichern, dann freigeben.", discardConfirm: "Ungespeicherte Änderungen an diesem Text verwerfen?", previewExample: "Vorschau mit einer Beispielanzeige und deinem Bewerberprofil.",
       missing: list => `Fehlt zum Senden: ${list}. Trag es unter „Über mich“ oder in den Einstellungen ein; bis dahin überspringt die Routine diese Vorlage.`,
       failed: "Konnte nicht speichern", netFail: "Server nicht erreichbar.", changedMeanwhile: "Die Vorlage wurde inzwischen geändert; Einstellungen neu öffnen.",
       sendOn: "Senden an", sendPaused: "Senden pausiert", sentToday: (n, cap) => `${n}/${cap} heute`,
@@ -70,7 +70,7 @@
       },
       approved: (d, v) => `Aprovado em ${d} · versão ${v}`, notApproved: v => `Não aprovado · versão ${v}`,
       placeholders: "Marcadores (clique para inserir)", save: "Salvar texto", saved: "Salvo", preview: "Prévia", approve: "Aprovar esta versão", withdraw: "Retirar aprovação",
-      saveFirst: "Salve o texto primeiro e depois aprove.", previewExample: "Prévia com um anúncio de exemplo e seu perfil de candidato.",
+      saveFirst: "Salve o texto primeiro e depois aprove.", discardConfirm: "Descartar as alterações não salvas neste texto?", previewExample: "Prévia com um anúncio de exemplo e seu perfil de candidato.",
       missing: list => `Falta para enviar: ${list}. Preencha em Sobre mim ou nas Configurações; até lá a rotina pula este modelo.`,
       failed: "Não foi possível salvar", netFail: "Servidor inacessível.", changedMeanwhile: "O modelo mudou nesse meio tempo; reabra as Configurações.",
       sendOn: "Envio ligado", sendPaused: "Envio pausado", sentToday: (n, cap) => `${n}/${cap} hoje`,
@@ -198,14 +198,14 @@
 
       function switchTo(l) {
         if (l === cur) return;
-        if (dirty() && !confirm(t.saveFirst)) return;
+        if (dirty() && !confirm(t.discardConfirm)) return;
         cur = l; ta.dataset.touched = ""; clearMsgs(); sync();
       }
       async function call(fn) {
-        busy(true); clearMsgs();
-        try { await fn(); } finally { busy(false); sync(); }
+        busy(true); ta.disabled = true; clearMsgs();
+        try { await fn(); } finally { ta.disabled = false; busy(false); sync(); }
       }
-      const fail = async r => { lines(err, r.json && r.json.error === "version-changed" ? t.changedMeanwhile : problem(t, r)); await reload(); };
+      const fail = async r => { lines(err, r.json && r.json.error === "version-changed" ? t.changedMeanwhile : problem(t, r)); if (!(await reload())) lines(err, t.netFail); };
       function save() {
         return call(async () => {
           const r = await api("PUT", `/api/templates/${id}/${cur}`, { body: ta.value });
@@ -252,7 +252,7 @@
     host.hidden = !s;
     if (!s) { host.replaceChildren(); host.onclick = null; return; }
     const word = s.paused ? t.sendPaused : t.sendOn;
-    const draw = (full, short) => host.replaceChildren(el("span", { class: "dot", "aria-hidden": "true" }), el("span", { class: "lg", text: full }), el("span", { class: "sh", text: short }));
+    const draw = (full, short, role) => host.replaceChildren(el("span", { class: "dot", "aria-hidden": "true" }), el("span", { class: "lg", text: full, role }), el("span", { class: "sh", text: short, role }));
     draw(s.label, `${word} · ${status.today.used}/${status.today.cap}`);
     host.className = "chip sendsw " + (s.paused ? "paused" : "on");
     host.title = s.title; host.disabled = false;
@@ -261,11 +261,12 @@
     host.onclick = async () => {
       if (host.disabled) return;
       if (s.paused && !confirm(t.resumeConfirm)) return;
-      host.disabled = true;
+      host.disabled = true; host.dataset.busy = "1";
       const r = await api("PUT", "/api/outreach/pause", { paused: !s.paused });
+      delete host.dataset.busy;
       if (r.ok) { onChanged && onChanged(); return; }
-      draw(t.pauseFail, t.pauseFail);
-      setTimeout(() => headerSwitch(host, { lang, status, onChanged }), 4000);
+      draw(t.pauseFail, t.pauseFail, "status");
+      setTimeout(() => { if (onChanged) onChanged(); else headerSwitch(host, { lang, status, onChanged }); }, 4000);
     };
   }
 

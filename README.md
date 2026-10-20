@@ -2,17 +2,17 @@
 
 A private tracker for finding a flat to rent or buy, run by each person on their own server. You describe your household and income, what you want and where you need to get to every day. The site ranks listings by your priorities, checks commute times and keeps your conversations with landlords. It also keeps your application documents encrypted and shares them only after you approve, through an expiring, watermarked link. It also shows sourced facts about each listing's surroundings: everyday places, flood zones, noise, recorded crime and census rent.
 
-A Claude Code routine that finds new listings and sends replies from templates you approve is planned (phase 4).
+An optional Claude Code routine finds new listings in your own browser, logs landlord replies and sends only the message templates you approved, at a pace you set. A pause switch stops new sends at once; a message already being sent can still go out.
 
 ## Status
 
-Phases 1 (core tracker), 2 (applicant profile and document vault) and 3 (area analysis) are built. Phase 4 is planned. The full design is in [docs/design.md](docs/design.md). It builds on [Car Hunt](https://github.com/DasMehl/car-hunt).
+Phases 1 to 4 are built: core tracker, applicant profile and document vault, area analysis, and the routine with automatic answers. The full design is in [docs/design.md](docs/design.md). It builds on [Car Hunt](https://github.com/DasMehl/car-hunt).
 
 ## What it does in phase 1
 
 - **Profile:** rent, buy or both; flat requirements; up to five important places with a travel-time limit each (car, bike or public transport); an optional radius; red-flag toggles; weights for the score; monthly net income.
 - **Listings:** add and edit by hand, delete. An address change recomputes coordinates and commute times.
-- **Commute:** car minutes via OSRM, bike minutes via the FOSSGIS bike router, public transport via Transitous, planned for the next weekday at each place's time.
+- **Commute:** car minutes via OSRM, bike minutes via the FOSSGIS bike router, public transport via Transitous, planned for the next weekday at each place's time. "Recalculate" runs in the background.
 - **Criteria check:** every listing is checked against the profile. Failing listings stay in the list, labelled with the reasons, and sort below the rest. Unknown commute times pass but are marked.
 - **Red flags:** a built-in catalogue (deposit before a viewing, payment by gift card, ID copy before any contact, and similar). You can switch entries off and add your own patterns.
 - **Scores:** a weighted score per listing. Listings get an estimated score from their data, shown with "≈"; the routine (phase 4) adds full ratings.
@@ -40,6 +40,16 @@ Phases 1 (core tracker), 2 (applicant profile and document vault) and 3 (area an
 
 The facts are computed in the background on your server after a listing is added or moved, and on "Recompute". Each figure shows its source, area level, data year and retrieval date; the page footer credits all sources.
 
+## What it does in phase 4
+
+- **Routine:** searches Immowelt, Kleinanzeigen and WG-Gesucht in your own logged-in browser and adds fitting listings. ImmoScout24 is manual only.
+- **Message templates** in German and English with placeholders, a preview and approval per version; editing a template withdraws its approval. The language also sets the default language of share pages and the applicant summary PDF (`?lang=pt` still works for the summary).
+- **Pace:** a minimum gap between messages and a daily cap (Berlin calendar day).
+- **Pause switch** in the header with today's count. It stops new sends at once; a message already being sent can still go out.
+- **Replies** are logged with their intent. A viewing invitation becomes a proposal you confirm or decline, also on a rejected listing; a rejection cancels confirmed viewings too.
+- **Documents requests** are recorded; documents still leave only through a share you create.
+- **Never:** documents, share links, unapproved texts, a second message for the same slot, texts in its own words, ImmoScout24.
+
 ## Run your own copy
 
 You need Node.js 18 or newer and a Railway account (or any host that runs a Node server with a persistent disk).
@@ -50,7 +60,7 @@ You need Node.js 18 or newer and a Railway account (or any host that runs a Node
 4. Set these variables on the service:
    - `DATA_DIR=/data` — where the JSON data files are kept. Without the volume, data is lost on redeploy.
    - `SITE_PASSWORD` — the password for the whole site. The server refuses to start without it.
-   - `SYNC_KEY` — a secret for the routine's API calls and photo uploads. Without it those routes return 503. You can leave it unset if you do not use the routine.
+   - `SYNC_KEY` — a secret for the routine. The routine gets only this key, never the site password; with it it reaches only its own routes (listings, photos, sync, send slots and replies), not your settings, templates, approvals or documents. Without it those routes return 503. You can leave it unset if you do not use the routine.
    - `VAULT_KEY` — the key for the applicant profile and document vault. Create it with `openssl rand -base64 32`, set it on the service, and keep a copy in your password manager. Without the same key the vault cannot be read. The key becomes mandatory as soon as the vault was first opened with it (the server writes a key check file on the first start with a key), even before any document is stored; after that the server will not start without the same key. To start over with a new key, stop the server and delete the empty `DATA_DIR/vault` folder. The key is never written to the volume. Without `VAULT_KEY` the profile, documents and share links are off. The server refuses `VAULT_KEY` without `SITE_PASSWORD`.
    - `OVERPASS_URL` (optional) — your own Overpass instance instead of the public servers. The first area facts can take minutes because the public Overpass servers are often overloaded.
    - `TRUST_PROXY=1` (optional, recommended on Railway) — Railway puts one proxy in front of the server; with this set, the share-link rate limit counts visitors instead of the proxy.
@@ -88,6 +98,14 @@ To run the tests:
 npm test
 ```
 
+## The routine
+
+Full steps in [routine/README.md](routine/README.md): save the sync key in a file, put your own searches in `searches.txt`, copy `routine/SKILL.md` into a scheduled task. Keep each saved search to 3 result pages or fewer, otherwise gone listings are never detected.
+
+To turn on sending: Settings → Contacting landlords, tick the option, choose the language, the gap and the daily cap, then approve each template. The pause switch in the header stops new sends at once; the routine re-checks it before every send, and a message already being sent can still go out.
+
+Immowelt, Kleinanzeigen and WG-Gesucht are used in your own logged-in browser at a human pace for your own search. Check each portal's terms yourself and remove a portal's search if it objects. ImmoScout24's terms forbid automated access: add its links by hand.
+
 ## Area data and coverage
 
 | Source | Licence | Attribution |
@@ -124,7 +142,7 @@ node scripts/area-data.js zensus   # https://www.destatis.de/static/DE/zensus/gi
 
 ## Coming next
 
-- **Phase 4: routine and automatic answers.** A Claude Code routine that searches Immowelt, Kleinanzeigen and WG-Gesucht in your own browser, and sends approved template replies at a human pace, never twice to the same listing.
+Nothing planned beyond phase 4; see the issues for ideas.
 
 ## Data and services
 

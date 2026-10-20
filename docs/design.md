@@ -48,7 +48,7 @@ Each phase gets its own implementation plan.
   "radius": { "center": null, "km": null },
   "redFlags": [ { "id": "deposit-before-viewing", "on": true } ],
   "weights": { "price": 2, "size": 1.5, "commute": 2, "area": 1, "condition": 1, "contact": 1 },
-  "outreach": { "enabled": false, "paused": false, "language": "de" }
+  "outreach": { "enabled": false, "paused": false, "language": "de", "minGapMin": 20, "dailyCap": 10 }
 }
 ```
 
@@ -58,6 +58,7 @@ Each phase gets its own implementation plan.
 - `flat.outdoor`: any | balcony | garden; `kitchen`: any | required; `wbs`: none (no housing permit) | have (permit held, WBS flats allowed) | exclude (hide WBS-only flats).
 - `places`: 0–5 entries; `mode`: car | transit | bike; `maxMin` 5–180; `time` HH:MM used for transit planning on a weekday.
 - `radius`: optional; both `center` and `km` set, or both null.
+- `outreach`: `language` de | en (templates exist in both; it is also the default language of share pages and the applicant summary PDF, which still accepts `?lang=pt`); `minGapMin` 5–1440 minutes between two messages; `dailyCap` 1–50 messages per Berlin calendar day. Saving the profile leaves `paused` unchanged; it belongs to the header switch.
 - Validation is strict like Car Hunt's (unknown keys rejected, ranges, enums, cross-field rules).
 
 ## Listing record (`DATA_DIR/listings.json`)
@@ -131,16 +132,22 @@ Sources confirmed by the data spike of 19.10.2026 and re-checked live by `script
 
 ## Routine and automatic answers (phase 4)
 
-- `routine/SKILL.md` template like Car Hunt's: reads the profile, searches Immowelt, Kleinanzeigen and WG-Gesucht in the owner's browser, applies the criteria, adds listings with photos and commute times.
-- Templates (first contact, viewing confirmation, documents follow) edited and approved in Settings, in de/en, filled from the applicant summary.
-- Sends only when `outreach.enabled` and not `paused`; human pace (minimum minutes between messages, daily cap set in Settings); once per listing; duplicate check across tracker, portal inboxes and email before every send, never re-send.
-- Replies: viewing invitation → owner confirms the time on the site; document request → status `docs-requested` and the approval step; refusal → `rejected`.
+- **Routine:** `routine/SKILL.md`, a Claude Code scheduled task in the owner's own logged-in browser. It runs the owner's saved searches on Immowelt, Kleinanzeigen and WG-Gesucht (ImmoScout24 stays manual: its terms forbid automated access), applies the profile and red flags, adds listings with photos (`PUT /api/img`), commute times and a rating, syncs warm and cold rent or price, and logs landlord replies. It authenticates with the sync key only; it never has the site password. Each saved search must stay at 3 result pages or fewer, otherwise gone listings are never detected.
+- **Two roles:** a request with `x-sync-key` reaches only the routine's routes (profile, listings, meta, red flags, outreach status, listing upsert, photos, sync, send slots, replies). Templates, approvals, the pause switch, viewing decisions, statuses, the vault and share links are owner-only, also when the password is sent along.
+- **Templates:** first contact, viewing confirmation, documents follow and "not interested anymore", in de and en, in `DATA_DIR/outreach.json`. Placeholders `{greeting}`, `{name}`, `{household}`, `{job}`, `{income}`, `{moveIn}`, `{listingTitle}`, `{address}` and, for the confirmation, `{viewingTime}`; unknown placeholders are rejected on save; Settings shows a preview with the real applicant profile. Each text has a `version`; approval stores `approvedAt` for that version and any edit withdraws it. The server fills the text when the routine claims a slot; the routine never receives the applicant profile.
+- **Send slots:** before every message the routine claims a slot. The server grants it only when outreach is enabled and not paused, the template is approved, the listing is eligible (first contact: shortlisted, status new, no message yet, all criteria met, no red flag; viewing confirmation: a viewing the owner confirmed; documents follow: documents requested; decline: dropped after contact), fewer than `dailyCap` slots were used today, the last one is at least `minGapMin` minutes old and every placeholder has a value. Checks and reservation happen without interruption; one slot per listing and template (per viewing for confirmations), at most 3 claims per listing and template per Berlin day. A retry of the same claim returns the same slot only while the claim is valid: a repeat re-checks approval, version and eligibility, and a claim whose save is still running answers "busy". After sending, the routine reports `sent` (the message is logged once with its template and version) or `release` (nothing went out). A claim unanswered for 24 h expires and blocks that template for that listing for good, because a send may have happened; the update log shows "Expired, maybe sent: check". "already-contacted" closes the slot for good too. ImmoScout24 is refused by `source` and by URL host.
+- **Duplicate check:** per template, before every claim, across the tracker, the three portal inboxes and the owner's email. First contact needs positive evidence of earlier contact about this flat; follow-ups look for a message that already did that template's job. Ambiguous cases, such as the same landlord on another flat, are skipped and reported "check manually". Once a send might have happened, the routine never sends again.
+- **Replies:** logged with `intent` viewing-invite | documents-request | rejection | question | other. A reply without `date` is a repeat when the same text, from and via already exist. A viewing invitation becomes a proposal with its times that the owner confirms (one time) or declines on the listing, also on an already rejected listing; only a confirmed viewing can be confirmed to the landlord. A documents request records the types and sets `docs-requested`; documents still leave only through a share the owner creates. A rejection sets `rejected` and cancels open proposals and confirmed viewings.
+- **Pause:** a switch in the page header (with today's count against the cap) stops new slots at once; the routine re-checks the status right before every send click. A message already mid-send can still go out. Reading and adding continue.
+- **Never:** documents or share links from the routine, messages in the routine's own words, a second message for the same slot, ImmoScout24.
+- **Phase-1 limits fixed:** `POST /api/sync` follows warm and cold rent for rent listings and the price for buy listings, with price history and log; "Recalculate commute" runs in a background job (202 and a status endpoint).
 
 ## Security
 
 - `SITE_PASSWORD` required (refuse to start without, unless `ALLOW_OPEN=1`), as in Car Hunt.
 - `VAULT_KEY` required once the vault holds data.
 - Public routes: `/healthz`, `/s/<token>` only.
+- The routine authenticates with `SYNC_KEY` only and reaches an allow-list of routes; owner routes refuse any request carrying the sync key. Routine requests are rate-limited (60 a minute) and their bodies limited (64 KB; reply texts 5,000 characters). Logs carry no message texts or applicant data.
 - No personal data in the repository; checks grep a private pattern list before every push.
 
 ## Testing

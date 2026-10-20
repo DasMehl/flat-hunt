@@ -58,3 +58,24 @@ test("update log parts for sent, skipped and reply entries", () => {
   assert.deepEqual(ui.updateParts({ type: "reply", intent: "viewing-invite" }, "en"), { label: "Reply", note: "Viewing invitation" });
   assert.equal(ui.updateParts({ type: "price" }, "en"), null);
 });
+
+test("missing or invalid times never throw", () => {
+  assert.equal(ui.fmtTime(undefined, "en"), "");
+  assert.equal(ui.fmtTime("nonsense", "de"), "");
+  assert.equal(ui.fmtTime(null, "pt"), "");
+  assert.equal(ui.viewingText({ status: "confirmed" }, "en"), ui.L.en.confirmed("").trim() + " " + ui.L.en.confirmationPending);
+  assert.equal(ui.viewingText({ status: "confirmed", time: "x", confirmationSentAt: "y" }, "en"), ui.L.en.confirmed("").trim() + " " + ui.L.en.confirmationPending);
+  assert.equal(ui.viewingText({ status: "pending" }, "en"), ui.L.en.noTimes);
+  assert.equal(ui.viewingText({ status: "weird" }, "de"), ui.L.de.cancelled);
+});
+
+test("badge path: pending with usable times only, tolerant of missing fields", () => {
+  assert.equal(ui.hasPendingProposal({ viewings: [{ status: "pending", proposedTimes: ["2026-10-27T18:00:00+01:00"] }] }), true);
+  assert.equal(ui.hasPendingProposal({ viewings: [{ status: "pending" }, { status: "pending", proposedTimes: [] }, { status: "confirmed", proposedTimes: ["x"] }] }), false);
+  assert.equal(ui.hasPendingProposal({}), false);
+  assert.deepEqual(ui.timesOf({}), []);
+});
+
+test("message tag without a template version leaves the version out", () => {
+  assert.equal(ui.messageTag({ dir: "out", templateId: "decline", lang: "en" }, "en"), "Template: Not interested anymore · EN");
+});

@@ -28,7 +28,7 @@
       noTimes: "No time proposed. Answer the landlord yourself.", confirmed: t => `Viewing confirmed: ${t}`, confirmationSent: d => `Confirmation sent ${d}.`,
       confirmationPending: "The routine sends the confirmation in its next run, if the template is approved.",
       declined: "Declined. Nothing was sent; answer the landlord yourself if you like.", cancelled: "Cancelled: the landlord withdrew.",
-      me: "Me (routine)", templateTag: (name, v, lang) => `Template: ${name} · v${v} · ${lang.toUpperCase()}`,
+      me: "Me (routine)", templateTag: (name, v, lang) => `Template: ${name}${v == null ? "" : ` · v${v}`} · ${lang.toUpperCase()}`,
       intents: { "viewing-invite": "Viewing invitation", "documents-request": "Documents request", rejection: "Rejection", question: "Question", other: "Other" },
       upSent: "Message sent", upReply: "Reply", upSkipped: "Skipped (already in contact)", viewingBadge: "Viewing to confirm",
       claimOpen: "The confirmation is being sent right now. Try again in a minute."
@@ -55,7 +55,7 @@
       noTimes: "Kein Termin vorgeschlagen. Antworte dem Vermieter selbst.", confirmed: t => `Besichtigung bestätigt: ${t}`, confirmationSent: d => `Bestätigung gesendet am ${d}.`,
       confirmationPending: "Die Routine schickt die Bestätigung bei ihrem nächsten Lauf, wenn die Vorlage freigegeben ist.",
       declined: "Abgelehnt. Es wurde nichts gesendet; antworte dem Vermieter bei Bedarf selbst.", cancelled: "Abgesagt: Der Vermieter hat zurückgezogen.",
-      me: "Ich (Routine)", templateTag: (name, v, lang) => `Vorlage: ${name} · V${v} · ${lang.toUpperCase()}`,
+      me: "Ich (Routine)", templateTag: (name, v, lang) => `Vorlage: ${name}${v == null ? "" : ` · V${v}`} · ${lang.toUpperCase()}`,
       intents: { "viewing-invite": "Besichtigungseinladung", "documents-request": "Unterlagenanfrage", rejection: "Absage", question: "Frage", other: "Sonstiges" },
       upSent: "Nachricht gesendet", upReply: "Antwort", upSkipped: "Übersprungen (schon in Kontakt)", viewingBadge: "Termin bestätigen",
       claimOpen: "Die Bestätigung wird gerade gesendet. Versuche es in einer Minute noch einmal."
@@ -82,7 +82,7 @@
       noTimes: "Nenhum horário proposto. Responda você mesmo ao proprietário.", confirmed: t => `Visita confirmada: ${t}`, confirmationSent: d => `Confirmação enviada em ${d}.`,
       confirmationPending: "A rotina envia a confirmação na próxima execução, se o modelo estiver aprovado.",
       declined: "Recusado. Nada foi enviado; responda ao proprietário se quiser.", cancelled: "Cancelado: o proprietário desistiu.",
-      me: "Eu (rotina)", templateTag: (name, v, lang) => `Modelo: ${name} · v${v} · ${lang.toUpperCase()}`,
+      me: "Eu (rotina)", templateTag: (name, v, lang) => `Modelo: ${name}${v == null ? "" : ` · v${v}`} · ${lang.toUpperCase()}`,
       intents: { "viewing-invite": "Convite para visita", "documents-request": "Pedido de documentos", rejection: "Recusa", question: "Pergunta", other: "Outro" },
       upSent: "Mensagem enviada", upReply: "Resposta", upSkipped: "Ignorado (já em contato)", viewingBadge: "Confirmar visita",
       claimOpen: "A confirmação está sendo enviada agora. Tente novamente em um minuto."
@@ -90,7 +90,11 @@
   };
 
   // A viewing time in Berlin time for the page: "Tue 27 Oct, 18:00" in the page language.
-  const fmtTime = (iso, lang) => new Intl.DateTimeFormat((L[lang] || L.en).locale, { timeZone: "Europe/Berlin", weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(new Date(iso));
+  const validDate = iso => { const d = typeof iso === "string" || typeof iso === "number" ? new Date(iso) : null; return d && !Number.isNaN(d.getTime()) ? d : null; };
+  const timesOf = v => Array.isArray(v && v.proposedTimes) ? v.proposedTimes.filter(x => typeof x === "string") : [];
+  const hasPendingProposal = c => ((c && c.viewings) || []).some(v => v && v.status === "pending" && timesOf(v).length);
+  const fmtTime = (iso, lang) => { const d = validDate(iso); return d ? fmtTimeOf(d, lang) : ""; };
+  const fmtTimeOf = (d, lang) => new Intl.DateTimeFormat((L[lang] || L.en).locale, { timeZone: "Europe/Berlin", weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(d);
 
   // The header switch: its label, tooltip and whether it shows the paused state.
   function switchState(status, lang) {
@@ -111,10 +115,13 @@
   // What the viewing block says about one proposal (DOM-free, for the tests).
   function viewingText(v, lang) {
     const t = L[lang] || L.en;
-    if (v.status === "pending") return v.proposedTimes.length ? t.proposed : t.noTimes;
-    if (v.status === "confirmed") return t.confirmed(fmtTime(v.time, lang)) + " " + (v.confirmationSentAt ? t.confirmationSent(new Date(v.confirmationSentAt).toLocaleDateString(t.locale, { timeZone: "Europe/Berlin" })) : t.confirmationPending);
+    if (v.status === "pending") return timesOf(v).length ? t.proposed : t.noTimes;
+    if (v.status === "confirmed") {
+      const sent = validDate(v.confirmationSentAt);
+      return t.confirmed(fmtTime(v.time, lang)).trim() + " " + (sent ? t.confirmationSent(sent.toLocaleDateString(t.locale, { timeZone: "Europe/Berlin" })) : t.confirmationPending);
+    }
     if (v.status === "declined") return t.declined;
-    return t.cancelled;
+    return t.cancelled; // cancelled and any unknown status
   }
 
   // Newest proposal first.
@@ -136,7 +143,7 @@
     return null;
   }
 
-  const shared = { TEMPLATE_IDS, TEMPLATE_LANGS, INTENTS, L, fmtTime, switchState, messageTag, viewingText, sortViewings, viewingError, updateParts };
+  const shared = { timesOf, hasPendingProposal, TEMPLATE_IDS, TEMPLATE_LANGS, INTENTS, L, fmtTime, switchState, messageTag, viewingText, sortViewings, viewingError, updateParts };
   if (typeof window === "undefined") { module.exports = shared; return; }
   // ---------- page ----------
   const el = (tag, attrs = {}, ...kids) => {
@@ -299,32 +306,36 @@
   function viewings(host, listing, { lang, onChanged }) {
     const t = L[lang] || L.en;
     const items = sortViewings(listing.viewings);
+    for (const k of [...viewingErrors.keys()]) if (!items.some(v => v.id === k)) viewingErrors.delete(k);
     host.hidden = !items.length;
     if (!items.length) { host.replaceChildren(); return; }
     const card = v => {
-      const err = el("p", { class: "err vw-err", role: "alert", text: viewingErrors.get(v.id) || "" });
+      const err = el("p", { class: "err vw-err", role: "alert" });
+      const shown = viewingErrors.get(v.id);
       viewingErrors.delete(v.id);
+      if (shown) setTimeout(() => { err.textContent = shown; }, 0); // inserted empty first so the live region announces it
       const btns = el("div", { class: "vu-btns" });
       const sendReq = async (action, body) => {
         const all = [...btns.querySelectorAll("button")];
         all.forEach(b => { b.disabled = true; });
         err.textContent = "";
         const r = await api("POST", `/api/listings/${encodeURIComponent(listing.id)}/viewings/${encodeURIComponent(v.id)}/${action}`, body);
-        if (r.ok) { onChanged && onChanged(); return; }
+        const reload = async () => { try { if (onChanged) await onChanged(); } catch (e) { all.forEach(b => { b.disabled = false; }); } };
+        if (r.ok) { await reload(); all.forEach(b => { if (b.isConnected) b.disabled = b.dataset.needsPick === "1"; }); return; }
         const msg = viewingError(r, lang);
         err.textContent = msg;
-        if (r.status !== 0 && onChanged) { viewingErrors.set(v.id, msg); onChanged(); } // reload to show what the server holds now
-        else all.forEach(b => { b.disabled = false; });
+        if (r.status !== 0 && onChanged) { viewingErrors.set(v.id, msg); await reload(); } // reload to show what the server holds now
+        all.forEach(b => { if (b.isConnected) b.disabled = b.dataset.needsPick === "1"; });
       };
       const decline = () => el("button", { type: "button", class: "vu-btn danger", text: t.decline, onclick: () => sendReq("decline") });
       const root = el("div", { class: "vw-item " + v.status });
-      if (v.status === "pending" && v.proposedTimes.length) {
+      if (v.status === "pending" && timesOf(v).length) {
         const name = "vw-" + v.id;
         let picked = null;
-        const ok = el("button", { type: "button", class: "vu-btn primary", text: t.confirmTime, disabled: true, onclick: () => sendReq("confirm", { time: picked }) });
+        const ok = el("button", { type: "button", class: "vu-btn primary", text: t.confirmTime, disabled: true, "data-needs-pick": "1", onclick: () => sendReq("confirm", { time: picked }) });
         const set = el("fieldset", { class: "vw-times" }, el("legend", { text: t.pickTime }),
-          v.proposedTimes.map(time => el("label", { class: "vw-time" },
-            el("input", { type: "radio", name, value: time, onchange: () => { picked = time; ok.disabled = false; } }),
+          timesOf(v).map(time => el("label", { class: "vw-time" },
+            el("input", { type: "radio", name, value: time, onchange: () => { picked = time; ok.dataset.needsPick = ""; ok.disabled = false; } }),
             el("span", { text: fmtTime(time, lang) }))));
         btns.append(ok, decline());
         root.append(el("p", { class: "vw-line", text: t.proposed }), set, btns, err);

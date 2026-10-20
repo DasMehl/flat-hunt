@@ -1183,7 +1183,7 @@ footer.sources a { color: inherit; }
       facts.append(el("span", "fact price " + priceCls(c), w != null ? `${eur(w)} ${T.warm}` : known(c.coldRent) ? `${eur(c.coldRent)} ${T.cold}` : T.noPrice));
       if (w != null && known(c.coldRent)) facts.append(el("span", "fact", `${eur(c.coldRent)} ${T.cold}`));
     }
-    if ((c.viewings || []).some(v => v.status === "pending" && v.proposedTimes.length)) { const vb = el("span", "fact warn", OutreachUI.L[lang].viewingBadge); facts.append(vb); }
+    if (OutreachUI.hasPendingProposal(c)) { const vb = el("span", "fact warn", OutreachUI.L[lang].viewingBadge); facts.append(vb); }
     if (known(c.rooms)) facts.append(el("span", "fact", T.rooms(nf(c.rooms, 1))));
     if (c.size) facts.append(el("span", "fact", sqm(c.size)));
     const pps = Criteria.pricePerSqm(c); if (pps != null) facts.append(el("span", "fact", eurSqm(pps)));
@@ -1289,7 +1289,7 @@ footer.sources a { color: inherit; }
     if (!msgs.length) tl.append(el("p", "empty", T.noMsgs));
     msgs.forEach(m => { const g = m.i18n && m.i18n[lang]; const text = !g ? m.text : (m.dir === "in" ? m.text + "\n\n(" + g + ")" : g); const mm = el("div", "msg " + (m.dir === "in" ? "in" : "out")); const meta = el("div", "meta"); const who = el("span"); who.append(el("b", null, m.from || (m.dir === "out" ? OutreachUI.L[lang].me : "")), document.createTextNode(m.via ? " · " + m.via : "")); const mtag = OutreachUI.messageTag(m, lang); if (mtag) who.append(document.createTextNode(" "), el("span", "tag mtag" + (m.dir === "in" && m.intent === "rejection" ? " back" : ""), mtag)); meta.append(who, el("span", null, fmtDate(m.date))); mm.append(meta, el("div", "text", text)); tl.append(mm); });
     right.append(tl);
-    const vw = el("section", "viewings"); OutreachUI.viewings(vw, c, { lang, onChanged: () => { expanded.add(c.id); load(); } }); if (!vw.hidden) right.insertBefore(vw, tl);
+    const vw = el("section", "viewings"); OutreachUI.viewings(vw, c, { lang, onChanged: () => { expanded.add(c.id); return load(); } }); if (!vw.hidden) right.insertBefore(vw, tl);
     const note = el("div", "saved");
     const ctr = el("div", "controls"); const r2 = el("div", "row2");
     const sW = el("div"); const sl = el("label", null, T.statusL); sl.htmlFor = "status-" + c.id; const ss = el("select"); ss.id = "status-" + c.id; STATUSES.forEach(k => { const o = el("option", null, T.status[k]); o.value = k; o.selected = k === c.status; ss.append(o); }); ss.onchange = () => save(c.id, { status: ss.value }, note); sW.append(sl, ss);

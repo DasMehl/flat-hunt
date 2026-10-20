@@ -26,12 +26,22 @@ const { normaliseOutreach, prune: pruneClaims, expiredLog } = require("./lib/out
 const { outreachApi } = require("./lib/outreach-api");
 const { repliesApi } = require("./lib/replies-api");
 const { createRateLimiter } = require("./lib/ratelimit");
+const { recordWrites } = require("./lib/undo");
 const CATALOGUE = require("./public/redflags.json");
 
 const STATUSES = ["new", "contacted", "viewing-invited", "viewing-done", "applied", "docs-requested", "accepted", "rejected", "dropped", "gone"];
 // Fields the routine may write with the sync key (PUT /api/listings/:id). Owner fields stay page-only.
 const LISTING_FIELDS = ["title", "url", "source", "mode", "coldRent", "utilities", "warmRent", "deposit", "takeover", "price", "rooms", "size", "floor", "lift", "outdoor", "kitchen", "petsAllowed", "availableFrom", "wbsRequired", "address", "postcode", "city", "district", "description", "lat", "lon", "mapsUrl", "commute", "commuteStale", "contact", "photos", "rating", "redFlags", "verdict", "pros", "cons", "questions", "i18n", "addedAt", "lastSeenAt", "priceHistory", "gone"];
 const LINK_FIELDS = ["url", "mapsUrl"];
+// Taken from the routine only when it creates a listing.
+const CREATE_ONLY_FIELDS = ["url", "source"];
+// Fixed paths below /api/listings/ that must never become a listing id.
+const FIXED_LISTING_PATHS = ["recalc-commute"];
+const MAX_MESSAGES = 200;
+// A message as the page sends it; text up to 10,000 characters.
+const validMessage = m => !!m && typeof m === "object" && !Array.isArray(m) && typeof m.text === "string" && m.text.length <= 10000;
+// Sent or logged by the routine (lib/outreach-api.js, lib/replies-api.js).
+const fromRoutine = m => !!m && typeof m === "object" && ["claimId", "externalId", "intent"].some(k => Object.hasOwn(m, k));
 const isHttpUrl = v => typeof v === "string" && /^https?:\/\//i.test(v);
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -58,13 +68,17 @@ function createApp(options = {}) {
     shares: (readJson(files.shares, { shares: [] }).shares) || [],
     outreach: normaliseOutreach(readJson(files.outreach, null), now())
   };
-  // Claims nobody reported on for a day lose their text on start-up, too.
-  const loadedClaims = state.outreach.claims, expiredClaims = [], prunedClaims = pruneClaims(loadedClaims, now(), new Set(), expiredClaims);
+  // Claims nobody reported on for a day are closed on start-up, too (as sent when the message reached the listing).
+  const loadedClaims = state.outreach.claims, expiredClaims = [], prunedClaims = pruneClaims(loadedClaims, now(), new Set(), expiredClaims, state.listings || {});
   const claimsChanged = prunedClaims.length !== loadedClaims.length || prunedClaims.some((c, i) => c !== loadedClaims[i]);
   state.outreach.claims = prunedClaims;
   // Written through a temp file and a rename, outreach.json first: a crash between the two writes can lose the update-log
   // line, but never writes it twice (the claim is already closed on the next start).
-  const writeFileAtomicSync = (file, data) => { const tmp = file + ".tmp"; fs.writeFileSync(tmp, data); fs.renameSync(tmp, file); };
+  const writeFileAtomicSync = (file, data) => {
+    const tmp = file + ".tmp";
+    try { fs.writeFileSync(tmp, data); fs.renameSync(tmp, file); }
+    catch (e) { try { fs.unlinkSync(tmp); } catch (e2) { /* nothing was left behind */ } throw e; }
+  };
   if (!fs.existsSync(files.outreach) || claimsChanged) writeFileAtomicSync(files.outreach, JSON.stringify(state.outreach));
   if (expiredClaims.length) { state.meta.log = [...expiredLog(expiredClaims, state.listings || {}, now()), ...(state.meta.log || [])].slice(0, 200); writeFileAtomicSync(files.meta, JSON.stringify(state.meta)); }
   if (!state.listings) {
@@ -74,7 +88,7 @@ function createApp(options = {}) {
       state.listings = seed.listings || {};
       state.meta.lastCheck = seed.snapshotAt || null;
     }
-    fs.writeFileSync(files.listings, JSON.stringify(state.listings));
+    writeFileAtomicSync(files.listings, JSON.stringify(state.listings));
   }
 
   let writing = Promise.resolve();
@@ -102,6 +116,10 @@ function createApp(options = {}) {
   let writingShares = Promise.resolve();
   const persistShares = () => (writingShares = writingShares.catch(() => {}).then(() => writeJsonAtomic(files.shares, { shares: state.shares })));
 
+  // PUT /api/profile and the pause switch share one write chain, so the file ends with the profile set last.
+  let writingProfile = Promise.resolve();
+  const saveProfile = value => (writingProfile = writingProfile.catch(() => {}).then(() => writeJsonAtomic(files.profile, value)));
+
   let writingOutreach = Promise.resolve();
   const persistOutreach = () => (writingOutreach = writingOutreach.catch(() => {}).then(() => writeJsonAtomic(files.outreach, state.outreach)));
 
@@ -125,28 +143,29 @@ function createApp(options = {}) {
     next();
   });
   // Before body parsing, so a body sent to /s can never produce a different answer than the uniform 404.
-  // Share links are public; everything registered after the password check is not.
+  // Share links and /healthz are public; everything registered after the access gate is not.
   app.use("/s", publicShares({ state, vault, persistShares, now, rateLimit: options.shareRateLimit }));
-  // Templates, send slots, replies and viewing decisions carry small JSON bodies only.
-  app.use(["/api/templates", "/api/outreach", "/api/listings/:id/replies", "/api/listings/:id/viewings"], express.json({ limit: "64kb" }));
-  app.use(express.json({ limit: "4mb" }));
-
   app.get("/healthz", (req, res) => res.type("text").send("ok"));
 
   // The owner signs in with the password; the routine sends only the sync key and reaches only its own routes (lib/routine-auth.js).
+  // Before the body parsers, so the body of a request without access is never read.
   app.use(accessGate({ password, syncKey, realm: () => state.profile && state.profile.name }));
+  // Templates, send slots, replies, owner messages and viewing decisions carry small JSON bodies only.
+  app.use(["/api/templates", "/api/outreach", "/api/listings/:id/replies", "/api/listings/:id/messages", "/api/listings/:id/viewings"], express.json({ limit: "64kb" }));
+  app.use(express.json({ limit: "4mb" }));
   const requireKey = requireSyncKey(syncKey);
   app.locals.requireKey = requireKey;
   app.use(vaultApi({ state, vault, vaultStatus: vault ? "ready" : vStatus === "empty" ? "off" : vStatus, persist, persistShares, now }));
   app.use(areaApi({ state, queue: areaQueue }));
   // Claims, "sent" reports and replies from the routine share one limit (default 60 a minute).
   const routineLimiter = createRateLimiter({ limit: 60, windowMs: 60000, ...(options.routineRateLimit || {}) });
-  app.use(outreachApi({ state, vault, persist, persistOutreach, saveProfile: v => writeJsonAtomic(files.profile, v), now, catalogue: CATALOGUE, requireKey, limiter: routineLimiter }));
+  app.use(outreachApi({ state, vault, persist, persistOutreach, saveProfile, now, catalogue: CATALOGUE, requireKey, limiter: routineLimiter }));
   app.use(repliesApi({ state, persist, now, requireKey, limiter: routineLimiter }));
 
   app.get("/api/listings", (req, res) => res.json({ listings: state.listings, updatedAt: new Date().toISOString() }));
 
-  // Registered before every /api/listings/:id route so it is never read as an id. Runs in the background (lib/commute-job.js).
+  // Registered before every /api/listings/:id route so it is never read as an id (PUT refuses it as an id, too). Runs in
+  // the background (lib/commute-job.js).
   app.post("/api/listings/recalc-commute", (req, res) => res.status(202).json({ ok: true, ...commuteJob.start() }));
   app.get("/api/commute/status", (req, res) => res.json(commuteJob.status()));
 
@@ -163,13 +182,14 @@ function createApp(options = {}) {
     // The pause switch has its own route; a saved profile never flips it.
     if (prev && prev.outreach && value.outreach) value.outreach.paused = prev.outreach.paused;
     state.profile = value;
+    // Both writes are queued now, so a pause switched while the listings are saved is written after this profile.
     try {
-      if (flagged.length) await persist();
-      await writeJsonAtomic(files.profile, value);
+      await Promise.all([flagged.length ? persist() : null, saveProfile(value)]);
       res.json({ ok: true, profile: value });
     } catch (e) {
-      state.profile = prev;
-      for (const c of flagged) delete c.commuteStale;
+      // Only while nothing newer (a pause, another save) replaced this profile.
+      if (state.profile === value) state.profile = prev;
+      for (const c of flagged) if (c.commuteStale === true) delete c.commuteStale;
       res.status(500).json({ error: "save failed" });
     }
   });
@@ -270,15 +290,40 @@ function createApp(options = {}) {
     if ("status" in p && !STATUSES.includes(p.status)) return res.status(400).json({ error: "invalid status" });
     if (["nextStep", "notes"].some(k => k in p && (typeof p[k] !== "string" || p[k].length > 10000))) return res.status(400).json({ error: "invalid text" });
     if ("pick" in p && typeof p.pick !== "boolean") return res.status(400).json({ error: "invalid pick" });
-    if ("messages" in p && (!Array.isArray(p.messages) || p.messages.length > 200 || p.messages.some(m => !m || typeof m !== "object" || typeof m.text !== "string" || m.text.length > 10000))) return res.status(400).json({ error: "invalid messages" });
-    const changed = allowed.filter(k => k in p).map(k => [k, Object.hasOwn(c, k), c[k]]);
-    for (const [k] of changed) c[k] = p[k];
+    if ("messages" in p && (!Array.isArray(p.messages) || p.messages.length > MAX_MESSAGES || p.messages.some(m => !validMessage(m)))) return res.status(400).json({ error: "invalid messages" });
+    const next = { ...p };
+    // Messages the routine sent or logged stay, whatever list a (possibly stale) page sends: the ledger and the reply
+    // check rely on them. The owner's own messages are replaced by the list.
+    if ("messages" in p) {
+      next.messages = [...(c.messages || []).filter(fromRoutine), ...p.messages.filter(m => !fromRoutine(m))];
+      if (next.messages.length > MAX_MESSAGES) return res.status(400).json({ error: "invalid messages" });
+    }
+    const done = recordWrites(c);
+    Object.assign(c, next);
+    const undo = done();
     try { await persist(); } catch (e) {
       // Restore only the fields this request changed, and only while they still hold what it wrote.
-      for (const [k, had, old] of changed) if (c[k] === p[k]) { if (had) c[k] = old; else delete c[k]; }
+      undo();
       return res.status(500).json({ error: "save failed" });
     }
     res.json({ ok: true, listing: c });
+  });
+
+  // The owner logs one message (a call, an e-mail, a letter). Appended, so messages written meanwhile are never lost.
+  app.post("/api/listings/:id/messages", async (req, res) => {
+    const c = Object.hasOwn(state.listings, req.params.id) ? state.listings[req.params.id] : null;
+    if (!c) return res.status(404).json({ error: "unknown listing" });
+    const m = req.body;
+    if (!validMessage(m) || fromRoutine(m)) return res.status(400).json({ error: "invalid messages" });
+    if ((c.messages || []).length >= MAX_MESSAGES) return res.status(400).json({ error: "invalid messages" });
+    const message = { ...m }, had = Object.hasOwn(c, "messages");
+    c.messages = [...(c.messages || []), message];
+    try { await persist(); } catch (e) {
+      const rest = (c.messages || []).filter(x => x !== message);
+      if (!rest.length && !had) delete c.messages; else c.messages = rest;
+      return res.status(500).json({ error: "save failed" });
+    }
+    res.status(201).json({ ok: true, listing: c });
   });
 
   // Fields that describe where the listing is; a new address makes all of them stale.
@@ -300,14 +345,14 @@ function createApp(options = {}) {
     // Everything below runs without awaiting, so a concurrent delete or edit cannot interleave.
     const c = state.listings[id];
     if (!c) return res.status(404).json({ error: "unknown listing" });
-    const prev = structuredClone(c), d = today(), before = headline(c);
+    const done = recordWrites(c), prevWarm = c.warmRent, d = today(), before = headline(c);
     const coldBefore = c.mode === "rent" ? c.coldRent ?? null : null;
     applyEdit(c, v);
     const after = headline(c), coldAfter = c.mode === "rent" ? c.coldRent ?? null : null;
     // The headline (price, else warm rent, else cold rent) is logged when it changes; otherwise a cold-rent change.
     const field = c.mode === "buy" ? "price" : c.warmRent != null ? "warmRent" : "coldRent";
     // A derived warm rent that disappears (utilities cleared) changes the basis, not the price.
-    const warmDropped = before != null && c.mode === "rent" && prev.warmRent != null && c.warmRent == null;
+    const warmDropped = before != null && c.mode === "rent" && prevWarm != null && c.warmRent == null;
     let entry = null;
     if (after != null && after !== before && !warmDropped) entry = { date: d, type: "price", field, id, text: c.title, from: before, to: after };
     else if (coldAfter != null && coldBefore != null && coldAfter !== coldBefore) entry = { date: d, type: "price", field: "coldRent", id, text: c.title, from: coldBefore, to: coldAfter };
@@ -319,9 +364,11 @@ function createApp(options = {}) {
       for (const k of PLACE_FIELDS) delete c[k];
       Object.assign(c, place);
     }
+    const undo = done();
     try { await persist(); }
     catch (e) {
-      if (state.listings[id] === c) state.listings[id] = prev;
+      // Only the fields this edit wrote, and only while they still hold what it wrote.
+      undo();
       const at = entry ? state.meta.log.indexOf(entry) : -1;
       if (at >= 0) state.meta.log.splice(at, 1);
       return res.status(500).json({ error: "save failed" });
@@ -369,19 +416,30 @@ function createApp(options = {}) {
 
   app.put("/api/listings/:id", requireKey, async (req, res) => {
     const id = req.params.id, incoming = req.body || {};
-    if (!/^[a-z0-9][a-z0-9-]{0,79}$/.test(id)) return res.status(400).json({ error: "invalid id" });
-    const listing = Object.fromEntries(Object.entries(incoming).filter(([k, v]) => LISTING_FIELDS.includes(k) && (!LINK_FIELDS.includes(k) || isHttpUrl(v))));
-    const prev = state.listings[id], snap = prev ? structuredClone(prev) : null;
+    if (!/^[a-z0-9][a-z0-9-]{0,79}$/.test(id) || FIXED_LISTING_PATHS.includes(id)) return res.status(400).json({ error: "invalid id" });
+    const prev = Object.hasOwn(state.listings, id) ? state.listings[id] : null;
+    // Where a listing lives (url, source) is set once, when it is created: the routine cannot move a listing to another
+    // portal, so the ImmoScout block holds for listings the owner added.
+    const fields = prev ? LISTING_FIELDS.filter(k => !CREATE_ONLY_FIELDS.includes(k)) : LISTING_FIELDS;
+    const listing = Object.fromEntries(Object.entries(incoming).filter(([k, v]) => fields.includes(k) && (!LINK_FIELDS.includes(k) || isHttpUrl(v))));
     // New coordinates make the area facts stale; the server recomputes them (the routine cannot write `area`).
     const moved = !!prev && ["lat", "lon"].some(k => k in listing && listing[k] !== prev[k]);
-    state.listings[id] = prev ? { ...prev, ...listing } : { status: "new", pick: false, notes: "", nextStep: "", messages: [], addedAt: today(), ...listing };
-    if (moved) delete state.listings[id].area;
-    if (!prev && typeof incoming.pick === "boolean") state.listings[id].pick = incoming.pick;
-    const entry = prev ? null : { date: today(), type: "new", id, text: state.listings[id].title, price: headline(state.listings[id]) };
+    let undo = null, written = prev;
+    if (prev) {
+      // Changed in place, so requests holding this listing (a "sent" report, a reply) keep writing to the live object.
+      const done = recordWrites(prev);
+      Object.assign(prev, listing);
+      if (moved) delete prev.area;
+      undo = done();
+    } else {
+      written = state.listings[id] = { status: "new", pick: false, notes: "", nextStep: "", messages: [], addedAt: today(), ...listing };
+      if (typeof incoming.pick === "boolean") written.pick = incoming.pick;
+    }
+    const entry = prev ? null : { date: today(), type: "new", id, text: written.title, price: headline(written) };
     if (entry) state.meta.log.unshift(entry);
-    const written = state.listings[id];
     try { await persist(); } catch (e) {
-      if (state.listings[id] === written) { if (snap) state.listings[id] = snap; else delete state.listings[id]; }
+      // Only this request's own writes: the fields it changed, or the listing it created while it is still that object.
+      if (undo) undo(); else if (state.listings[id] === written) delete state.listings[id];
       const at = entry ? state.meta.log.indexOf(entry) : -1;
       if (at >= 0) state.meta.log.splice(at, 1);
       return res.status(500).json({ error: "save failed" });
@@ -407,10 +465,9 @@ function createApp(options = {}) {
 
   app.post("/api/sync", requireKey, async (req, res) => {
     const seen = (req.body && req.body.seen) || {}, d = today(), changes = [];
-    const snaps = new Map(), prevCheck = state.meta.lastCheck, prevLog = state.meta.log;
+    const undos = [], prevCheck = state.meta.lastCheck, prevLog = state.meta.log;
     for (const [id, c] of Object.entries(state.listings)) {
-      const s = seen[id];
-      snaps.set(id, [c, structuredClone(c)]);
+      const s = seen[id], done = recordWrites(c);
       if (s) {
         c.lastSeenAt = d;
         if (c.gone) { c.gone = false; changes.push({ date: d, type: "back", id, text: c.title }); }
@@ -419,11 +476,14 @@ function createApp(options = {}) {
       } else if (req.body.complete && c.source !== "manual" && !c.gone && !["rejected", "dropped", "accepted", "gone"].includes(c.status)) {
         c.gone = true; c.goneAt = d; changes.push({ date: d, type: "gone", id, text: c.title });
       }
+      const undo = done();
+      if (undo.keys.length) undos.push(undo);
     }
     const checkedAt = state.meta.lastCheck = req.body.checkedAt || new Date().toISOString();
     state.meta.log = [...changes, ...state.meta.log].slice(0, 200);
     try { await persist(); } catch (e) {
-      for (const [id, [c, snap]] of snaps) if (state.listings[id] === c) state.listings[id] = snap;
+      // Per listing only the fields this sync wrote (lastSeenAt, gone, amounts, price history), while they still hold its values.
+      for (const undo of undos) undo();
       // Only this sync's own changes: log lines that others added meanwhile (an expired claim, a reply) stay.
       if (state.meta.lastCheck === checkedAt) state.meta.lastCheck = prevCheck;
       const kept = state.meta.log.filter(e => !changes.includes(e));

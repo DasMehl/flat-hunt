@@ -266,7 +266,7 @@ test("a repeated claim runs the approval, version and eligibility checks again a
     ["approval withdrawn", s => s.call("DELETE", "/api/templates/first-contact/de/approve"), "not-approved"],
     ["template edited", s => s.call("PUT", "/api/templates/first-contact/de", { body: "Guten Tag, ganz neuer Text hier. {name}" }), "not-approved"],
     ["listing dropped", s => s.call("PATCH", "/api/listings/flat-1", { status: "dropped" }), "already-contacted"],
-    ["portal switched to ImmoScout", s => s.addFlat("flat-1", { url: "https://www.immobilienscout24.de/expose/1" }), "portal-not-allowed"]
+    ["owner moved the link to ImmoScout", s => s.call("PATCH", "/api/listings/flat-1/listing", { url: "https://www.immobilienscout24.de/expose/1" }), "portal-not-allowed"]
   ]) {
     const s = await outreachApp();
     try {

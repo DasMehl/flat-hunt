@@ -129,7 +129,7 @@ Run the duplicate check (5.2) first. Then `POST /api/outreach/claims`. A claim t
 - 409 `claim-mismatch`: a claim for this listing and template exists with a different language or `via`. Skip the listing and let that claim expire; do not guess the original `via`.
 - 409 `already-sent`: treat as done. Never send again.
 - 409 `already-contacted` with `expired: true`: an earlier claim for this slot was never reported and expired after 24 hours; a send may have happened. Skip and report "check manually".
-- 409 `already-contacted` (without `expired`), `not-shortlisted`, `criteria`, `no-confirmed-viewing`, `no-doc-request`, `not-dropped`, `gone`, `portal-not-allowed`, `too-many-messages`: skip this listing.
+- 409 `already-contacted` (without `expired`), `not-shortlisted`, `criteria`, `no-confirmed-viewing`, `no-doc-request`, `not-dropped`, `rejected` (decline after the landlord said no), `gone`, `portal-not-allowed`, `too-many-messages`: skip this listing.
 - 409 `not-approved`: the template has no approval in this language or was edited since the claim. Skip this listing. When it answers a repeat claim, the server released the old claim: the old text is void, never send it. A later run may claim again with the new version.
 - 409 `missing-values` with `missing`: skip; report which applicant or profile values the owner should fill in.
 - 400, 404: the request is wrong or the listing is unknown; do not guess, skip and report.

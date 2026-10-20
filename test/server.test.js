@@ -284,9 +284,9 @@ test("PUT /api/listings drops link fields that are not http(s) and fields a flat
     assert.deepEqual(c.rating, { price: 7 });
     assert.deepEqual(c.redFlags, ["owner-abroad"]);
     assert.deepEqual(c.contact, { name: "A", type: "private" });
-    await fetch(s.base + "/api/listings/links", { method: "PUT", headers: s.sync, body: JSON.stringify({ url: "http://a.example/1" }) });
-    await fetch(s.base + "/api/listings/links", { method: "PUT", headers: s.sync, body: JSON.stringify({ url: "javascript:x" }) });
-    assert.equal((await (await fetch(s.base + "/api/listings", { headers: s.auth })).json()).listings.links.url, "http://a.example/1");
+    await fetch(s.base + "/api/listings/links2", { method: "PUT", headers: s.sync, body: JSON.stringify({ title: "Links 2", url: "http://a.example/1" }) });
+    await fetch(s.base + "/api/listings/links2", { method: "PUT", headers: s.sync, body: JSON.stringify({ url: "javascript:x" }) });
+    assert.equal((await (await fetch(s.base + "/api/listings", { headers: s.auth })).json()).listings.links2.url, "http://a.example/1");
   } finally { await s.close(); }
 });
 

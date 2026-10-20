@@ -129,3 +129,14 @@ test("the crime table and rent grid are loaded once per process", () => {
   assert.equal(crime.loadCrimeTable(), crime.loadCrimeTable());
   assert.equal(rent.loadRentGrid(), rent.loadRentGrid());
 });
+
+test("every area source has a dataset link and a licence link, both https", () => {
+  const S = require("../public/area-sources");
+  for (const id of S.ORDER) {
+    const s = S.SOURCES[id];
+    assert.match(s.url, /^https:\/\//, id + " url");
+    assert.match(s.licenceUrl, /^https:\/\//, id + " licenceUrl");
+    assert.notEqual(s.url, s.licenceUrl, id);
+  }
+  assert.doesNotMatch(S.SOURCES["bfg-nz"].licence, /equivalent/);
+});

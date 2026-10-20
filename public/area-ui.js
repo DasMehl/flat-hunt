@@ -32,7 +32,8 @@
       },
       noiseKind: { road: "road traffic", rail: "federal railway", tram: "tram and other rail", air: "air traffic", industry: "industry" },
       noiseMax: (band, src) => `Mapped noise level ${band} dB(A) Lden (day-evening-night average), loudest source: ${src}`,
-      noiseNone: "No mapped noise source at or above 55 dB(A) Lden at this point. Only major roads, railways, airports and industry are mapped, so this does not mean quiet.",
+      noiseNone: noRail => `No mapped noise source at or above 55 dB(A) Lden at this point. Only major roads, ${noRail ? "" : "railways, "}airports and industry are mapped, so this does not mean quiet.`,
+      noiseUncovered: "Federal railways (S-Bahn, DB) are not included in this map.", ebaLink: "EBA noise map", ebaUrl: "https://laermkartierung1.eisenbahn-bundesamt.de/",
       noiseOff: "Not mapped: noise maps are connected for North Rhine-Westphalia and Berlin only.",
       kind: { KfS: "district-free city", SK: "district-free city", LK: "district", K: "district", RV: "regional association" },
       crime: (k, y, t, n, r) => `Recorded crime in ${k} (${y}): ${t} cases per 100,000 residents. Germany: ${n} (${r} ×).`,
@@ -49,7 +50,7 @@
       tip: {
         formula: "Area estimate: everyday places within walking distance give 0–10 (six groups: transit stop, supermarket, pharmacy, doctor, kindergarten or school, park or playground; full points up to 5 min, ¾ up to 10, ½ up to 15, ¼ up to 20), minus flood area (frequent 3, HQ100 2, extreme only or class not stated 0.5), mapped noise (from 70 dB 2, from 65 1.5, from 60 1, from 55 0.5) and recorded crime in the Kreis against Germany (from 1.5 × 1, from 1.2 × 0.5); rounded, 0–10.",
         line: "Area ≈", part: { everyday: "everyday places", flood: "flood", noise: "noise", crime: "crime" },
-        skipped: s => `Not counted (no data or could not be fetched): ${s}.`, unrated: "Area not rated yet: the everyday places are not computed."
+        skipped: s => `Not counted (no data or could not be fetched): ${s}.`, estimated: "Some walking times are straight-line estimates (the walking router did not answer).", unrated: "Area not rated yet: the everyday places are not computed."
       },
       footer: "Data sources", dateSee: "date of retrieval, see each listing",
       footerMap: "Map and geocoding © OpenStreetMap contributors (ODbL); routing OSRM, FOSSGIS, Transitous."
@@ -77,7 +78,8 @@
       },
       noiseKind: { road: "Straßenverkehr", rail: "Eisenbahn des Bundes", tram: "Straßenbahn und sonstige Schienenwege", air: "Flugverkehr", industry: "Industrie" },
       noiseMax: (band, src) => `Kartierter Lärmpegel ${band} dB(A) Lden (Mittel über Tag, Abend und Nacht), lauteste Quelle: ${src}`,
-      noiseNone: "An diesem Punkt keine kartierte Lärmquelle ab 55 dB(A) Lden. Kartiert sind nur Hauptverkehrsstraßen, Schienenwege, Flughäfen und Industrie, das heißt also nicht, dass es ruhig ist.",
+      noiseNone: noRail => `An diesem Punkt keine kartierte Lärmquelle ab 55 dB(A) Lden. Kartiert sind nur Hauptverkehrsstraßen, ${noRail ? "" : "Schienenwege, "}Flughäfen und Industrie, das heißt also nicht, dass es ruhig ist.`,
+      noiseUncovered: "Eisenbahnen des Bundes (S-Bahn, DB) sind in dieser Karte nicht enthalten.", ebaLink: "Lärmkarte des EBA", ebaUrl: "https://laermkartierung1.eisenbahn-bundesamt.de/",
       noiseOff: "Nicht kartiert: Lärmkarten sind nur für Nordrhein-Westfalen und Berlin angebunden.",
       kind: { KfS: "kreisfreie Stadt", SK: "Stadtkreis", LK: "Landkreis", K: "Kreis", RV: "Regionalverband" },
       crime: (k, y, t, n, r) => `Polizeilich erfasste Straftaten in ${k} (${y}): ${t} Fälle je 100.000 Einwohner. Deutschland: ${n} (${r}-fach).`,
@@ -94,7 +96,7 @@
       tip: {
         formula: "Umgebungsschätzung: Alltagsorte in Gehweite ergeben 0–10 (sechs Gruppen: Haltestelle, Supermarkt, Apotheke, Arzt, Kita oder Schule, Park oder Spielplatz; volle Punkte bis 5 Min., ¾ bis 10, ½ bis 15, ¼ bis 20), abzüglich Hochwasserfläche (häufig 3, HQ100 2, nur extrem oder Klasse nicht angegeben 0,5), kartiertem Lärm (ab 70 dB 2, ab 65 1,5, ab 60 1, ab 55 0,5) und erfasster Kriminalität im Kreis gegenüber Deutschland (ab 1,5-fach 1, ab 1,2-fach 0,5); gerundet, 0–10.",
         line: "Umgebung ≈", part: { everyday: "Alltagsorte", flood: "Hochwasser", noise: "Lärm", crime: "Kriminalität" },
-        skipped: s => `Nicht gezählt (keine Daten oder nicht abrufbar): ${s}.`, unrated: "Umgebung noch nicht bewertet: die Alltagsorte sind noch nicht berechnet."
+        skipped: s => `Nicht gezählt (keine Daten oder nicht abrufbar): ${s}.`, estimated: "Einige Gehzeiten sind Luftlinien-Schätzungen (der Fußgänger-Router hat nicht geantwortet).", unrated: "Umgebung noch nicht bewertet: die Alltagsorte sind noch nicht berechnet."
       },
       footer: "Datenquellen", dateSee: "Abrufdatum, siehe jedes Inserat",
       footerMap: "Karte und Geokodierung © OpenStreetMap-Mitwirkende (ODbL); Routing OSRM, FOSSGIS, Transitous."
@@ -122,7 +124,8 @@
       },
       noiseKind: { road: "tráfego rodoviário", rail: "ferrovia federal", tram: "bonde e outros trilhos", air: "tráfego aéreo", industry: "indústria" },
       noiseMax: (band, src) => `Nível de ruído mapeado ${band} dB(A) Lden (média dia-tarde-noite), fonte mais alta: ${src}`,
-      noiseNone: "Nenhuma fonte de ruído mapeada a partir de 55 dB(A) Lden neste ponto. Só são mapeadas vias principais, ferrovias, aeroportos e indústria, então isso não significa silêncio.",
+      noiseNone: noRail => `Nenhuma fonte de ruído mapeada a partir de 55 dB(A) Lden neste ponto. Só são mapeadas vias principais, ${noRail ? "" : "ferrovias, "}aeroportos e indústria, então isso não significa silêncio.`,
+      noiseUncovered: "As ferrovias federais (S-Bahn, DB) não estão incluídas neste mapa.", ebaLink: "Mapa de ruído do EBA", ebaUrl: "https://laermkartierung1.eisenbahn-bundesamt.de/",
       noiseOff: "Não mapeado: os mapas de ruído estão conectados apenas para a Renânia do Norte-Vestfália e Berlim.",
       kind: { KfS: "cidade independente", SK: "cidade independente", LK: "distrito", K: "distrito", RV: "associação regional" },
       crime: (k, y, t, n, r) => `Crimes registrados pela polícia em ${k} (${y}): ${t} casos por 100 mil habitantes. Alemanha: ${n} (${r} ×).`,
@@ -139,7 +142,7 @@
       tip: {
         formula: "Estimativa da região: lugares do dia a dia a pé dão 0–10 (seis grupos: parada de transporte, supermercado, farmácia, médico, creche ou escola, parque ou parquinho; pontos cheios até 5 min, ¾ até 10, ½ até 15, ¼ até 20), menos área de inundação (frequente 3, HQ100 2, só extrema ou classe não informada 0,5), ruído mapeado (a partir de 70 dB 2, de 65 1,5, de 60 1, de 55 0,5) e criminalidade registrada no Kreis em relação à Alemanha (a partir de 1,5 × 1, de 1,2 × 0,5); arredondado, 0–10.",
         line: "Região ≈", part: { everyday: "lugares do dia a dia", flood: "inundação", noise: "ruído", crime: "criminalidade" },
-        skipped: s => `Não contados (sem dados ou não obtidos): ${s}.`, unrated: "Região ainda não avaliada: os lugares do dia a dia não foram calculados."
+        skipped: s => `Não contados (sem dados ou não obtidos): ${s}.`, estimated: "Alguns tempos a pé são estimativas em linha reta (o roteador a pé não respondeu).", unrated: "Região ainda não avaliada: os lugares do dia a dia não foram calculados."
       },
       footer: "Fontes de dados", dateSee: "data de consulta, ver cada anúncio",
       footerMap: "Mapa e geocodificação © colaboradores do OpenStreetMap (ODbL); rotas OSRM, FOSSGIS, Transitous."
@@ -165,10 +168,15 @@
     const out = [T.formula, `${T.line} ${nf(lang, r.value)} = ${line}`];
     const skipped = ["flood", "noise", "crime"].filter(k => { const f = fig(area, k); return !f || f.status === "no-data" || f.status === "error"; });
     if (skipped.length) out.push(T.skipped(skipped.map(k => T.part[k]).join(", ")));
+    const items = fig(area, "amenities") && fig(area, "amenities").items;
+    if (items && Object.values(items).some(it => it && it.estimated)) out.push(T.estimated);
     return out.join("\n");
   }
 
-  if (isNode) { module.exports = { L, ratingTip, bandOf, signed }; return; }
+  // Badge tooltip: "<source name> · <data year>"; just the year when the source entry is unknown.
+  const noiseBadgeTitle = (name, year, dy) => (name ? name + " · " : "") + dy(year);
+
+  if (isNode) { module.exports = { L, ratingTip, bandOf, signed, noiseBadgeTitle }; return; }
 
   // ---------- DOM helpers ----------
   const el = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
@@ -189,9 +197,9 @@
         if (f.fetchedAt) bits.push(T.retrieved(date(lang, f.fetchedAt)));
         if (f.cached) bits.push(T.cached);
       }
-      const span = el("span", null, bits.join(" · ") + " · ");
-      span.title = AreaSources.attribution(id, f.fetchedAt);
-      p.append(span, link(s.url, s.licence));
+      const rest = bits.slice(1), name = link(s.url, s.name), span = el("span", null, (rest.length ? " · " + rest.join(" · ") : "") + " · ");
+      name.title = span.title = AreaSources.attribution(id, f.fetchedAt);
+      p.append(name, span, link(s.licenceUrl, s.licence));
     });
     return p;
   }
@@ -246,7 +254,8 @@
       b.append(el("p", "area-txt", k && k.status === "ok" ? T.noiseOff : T.noData));
       return;
     }
-    if (f.max == null) b.append(el("p", "area-txt", T.noiseNone));
+    const noRail = Array.isArray(f.uncovered) && f.uncovered.includes("rail");
+    if (f.max == null) b.append(el("p", "area-txt", T.noiseNone(noRail)));
     else {
       b.append(el("p", "area-txt", T.noiseMax(f.band || bandOf(f.max), T.noiseKind[f.dominant] || f.dominant || "?")));
       const ul = el("ul", "area-list");
@@ -340,7 +349,7 @@
     }
     if (no && no.status === "ok" && typeof no.max === "number" && no.max >= 65) {
       const b = el("span", "vu-badge warn", T.noise(no.band || bandOf(no.max)));
-      b.title = (S[no.source] ? S[no.source].name : "") + ` · ${dy(no.dataYear || 2022)}`; out.push(b);
+      b.title = noiseBadgeTitle(S[no.source] && S[no.source].name, no.dataYear || 2022, dy); out.push(b);
     }
     if (o.queued) { const b = el("span", "vu-badge muted", T.queued); b.title = T.queuedTip; out.push(b); }
     return out;
@@ -357,7 +366,7 @@
       const s = AreaSources.SOURCES[id]; if (!s) return;
       const li = el("li");
       const attr = s.attribution.replace("{date}", T.dateSee).replace("{year}", year);
-      li.append(el("b", null, s.name), document.createTextNode(" — " + attr + " — "), link(s.url, s.licence));
+      li.append((() => { const b = el("b"); b.append(link(s.url, s.name)); return b; })(), document.createTextNode(" — " + attr + " — "), link(s.licenceUrl, s.licence));
       ul.append(li);
     });
     ul.append(el("li", null, T.footerMap));

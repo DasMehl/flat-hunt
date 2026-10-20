@@ -31,3 +31,26 @@ test("noise bands and signed percentages", () => {
   assert.equal(ui.signed("de", -0.12), "−12");
   assert.equal(ui.signed("en", 0), "0");
 });
+
+test("rating tooltip says when walking minutes are straight-line estimates", () => {
+  const est = { ...area, amenities: { status: "ok", items: { transit: { minutes: 3, estimated: true }, supermarket: { minutes: 4, estimated: false } } } };
+  for (const lang of ["en", "de", "pt"]) {
+    assert.ok(ui.ratingTip({ area: est }, lang).includes(ui.L[lang].tip.estimated), lang);
+    assert.ok(!ui.ratingTip({ area }, lang).includes(ui.L[lang].tip.estimated), lang);
+  }
+});
+
+test("noiseNone does not claim railways when the source does not cover them; uncovered text and EBA link exist", () => {
+  for (const lang of ["en", "de", "pt"]) {
+    const T = ui.L[lang];
+    assert.notEqual(T.noiseNone(false), T.noiseNone(true), lang);
+    assert.ok(T.noiseUncovered.length > 20 && /^https:\/\//.test(T.ebaUrl), lang);
+    assert.ok(!/rail|Schienen|ferrov/i.test(T.noiseNone(true)), lang);
+    assert.ok(/rail|Schienen|ferrov/i.test(T.noiseNone(false)), lang);
+  }
+});
+
+test("noise badge tooltip has no leading separator when the source entry is missing", () => {
+  assert.equal(ui.noiseBadgeTitle(undefined, 2022, y => `data ${y}`), "data 2022");
+  assert.equal(ui.noiseBadgeTitle("Name", 2022, y => `data ${y}`), "Name · data 2022");
+});

@@ -1,6 +1,8 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const { applySeen, headline, modeOf } = require("../lib/price-sync");
+const fs = require("node:fs");
+const path = require("node:path");
 const { start } = require("./helpers");
 
 const D = "2026-10-22";
@@ -65,5 +67,55 @@ test("POST /api/sync is mode-aware: rent listings follow warm and cold rent, buy
     assert.equal(l["buy-1"].price, 290000);
     const log = (await (await fetch(s.base + "/api/meta", { headers: s.auth })).json()).log;
     assert.deepEqual(log.filter(e => e.type === "price").map(e => e.field), ["warmRent", "price"]);
+  } finally { await s.close(); }
+});
+
+test("rent: a warm rent appearing on a cold-only listing is no price change when the cold rent stays", () => {
+  const c = { title: "Example", mode: "rent", coldRent: 800 };
+  assert.equal(applySeen(c, { warmRent: 990, coldRent: 800 }, "example", D), null);
+  assert.equal(c.warmRent, 990);
+  assert.equal(c.priceHistory, undefined);
+});
+
+test("rent: a warm rent appearing together with a new cold rent logs the cold rent change", () => {
+  const c = { title: "Example", mode: "rent", coldRent: 800 };
+  assert.deepEqual(applySeen(c, { warmRent: 990, coldRent: 780 }, "example", D), { date: D, type: "price", field: "coldRent", id: "example", text: "Example", from: 800, to: 780 });
+  assert.equal(c.warmRent, 990);
+  assert.deepEqual(c.priceHistory, [{ date: D, price: 990, coldRent: 780 }]);
+});
+
+test("rent: a derived warm rent is rounded to cents", () => {
+  const c = { title: "Example", mode: "rent", coldRent: 800, utilities: 190.1, warmRent: 990.1 };
+  applySeen(c, { coldRent: 760.2 }, "example", D);
+  assert.equal(c.warmRent, 950.3);
+});
+
+test("applySeen ignores garbage entries", () => {
+  const c = { title: "Example", mode: "rent", coldRent: 700 };
+  for (const s of [true, "x", 5, undefined]) assert.equal(applySeen(c, s, "example", D), null);
+});
+
+test("sync: a garbage seen entry clears gone without a price change; a failed save rolls a rent listing back", async () => {
+  const s = await start();
+  try {
+    const put = (id, body) => fetch(s.base + "/api/listings/" + id, { method: "PUT", headers: s.sync, body: JSON.stringify(body) });
+    await put("g-1", { title: "G", mode: "rent", coldRent: 700, warmRent: 800 });
+    s.app.locals.state.listings["g-1"].gone = true;
+    const r = await fetch(s.base + "/api/sync", { method: "POST", headers: s.sync, body: JSON.stringify({ seen: { "g-1": true } }) });
+    assert.deepEqual((await r.json()).changes.map(c => c.type), ["back"]);
+    assert.equal(s.app.locals.state.listings["g-1"].warmRent, 800);
+  } finally { await s.close(); }
+});
+
+test("sync: a failed save rolls back cold rent, warm rent and price history of a rent listing", async () => {
+  const s = await start();
+  try {
+    await fetch(s.base + "/api/listings/r-1", { method: "PUT", headers: s.sync, body: JSON.stringify({ title: "R", mode: "rent", coldRent: 800, utilities: 190, warmRent: 990, priceHistory: [{ date: "2026-10-01", price: 990, coldRent: 800 }] }) });
+    const before = structuredClone(s.app.locals.state.listings["r-1"]);
+    fs.rmSync(path.join(s.dir, "listings.json")); fs.mkdirSync(path.join(s.dir, "listings.json"));
+    const r = await fetch(s.base + "/api/sync", { method: "POST", headers: s.sync, body: JSON.stringify({ seen: { "r-1": { warmRent: 950, coldRent: 760 } } }) });
+    assert.equal(r.status, 500);
+    assert.deepEqual(await r.json(), { error: "save failed" });
+    assert.deepEqual(s.app.locals.state.listings["r-1"], before);
   } finally { await s.close(); }
 });

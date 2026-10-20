@@ -420,3 +420,81 @@ test("saving the profile keeps the pause switch where the pause route left it", 
     assert.equal(s.app.locals.state.profile.outreach.paused, false);
   } finally { await s.close(); }
 });
+
+// Holds the next save of one file (matched by name) until release(), then lets it succeed or fail.
+function gateSave(name, mode) {
+  const real = fs.promises.rename;
+  let open; const gate = new Promise(r => { open = r; }); let used = false;
+  fs.promises.rename = async (a, b) => { if (!used && path.basename(b) === name) { used = true; await gate; if (mode === "fail") throw new Error("EIO"); } return real(a, b); };
+  return { release: () => open(), restore: () => { fs.promises.rename = real; } };
+}
+const onDisk = s => JSON.parse(fs.readFileSync(path.join(s.dir, "outreach.json"), "utf8"));
+
+test("while 'sent' is being saved, a repeat claim, sent or release for it is told to wait; a failed save loses nothing", async () => {
+  const s = await outreachApp();
+  let g = { restore() {} };
+  try {
+    await s.addFlat("flat-1"); await s.approve("first-contact");
+    const { claim } = await (await s.claim({ listingId: "flat-1", templateId: "first-contact" })).json();
+    g = gateSave("listings.json", "fail");
+    const sent = s.routine("POST", `/api/outreach/claims/${claim.id}/sent`);
+    await tick(80);
+    for (const r of [await s.claim({ listingId: "flat-1", templateId: "first-contact" }), await s.routine("POST", `/api/outreach/claims/${claim.id}/sent`), await s.routine("POST", `/api/outreach/claims/${claim.id}/release`)]) {
+      assert.equal(r.status, 409);
+      assert.equal((await r.json()).reason, "busy");
+    }
+    g.release();
+    assert.equal((await sent).status, 500);
+    g.restore();
+    const c = onDisk(s).claims.find(x => x.id === claim.id);
+    assert.equal(c.status, "claimed");
+    assert.ok(c.text, "the text is still there to be sent");
+    assert.equal((s.app.locals.state.listings["flat-1"].messages || []).length, 0);
+    assert.deepEqual(await (await s.routine("POST", `/api/outreach/claims/${claim.id}/sent`)).json(), { ok: true, repeated: false });
+  } finally { g.restore(); await s.close(); }
+});
+
+test("a failed approve save does not undo a withdrawal made while it was pending", async () => {
+  const s = await outreachApp();
+  let h = { restore() {} };
+  try {
+    await s.approve("first-contact"); s.advance(1);
+    h = gateSave("outreach.json", "fail");
+    const pa = s.call("POST", "/api/templates/first-contact/de/approve", { version: 1 });
+    await tick(60);
+    const pw = s.call("DELETE", "/api/templates/first-contact/de/approve");
+    await tick(60);
+    h.release();
+    const [ra, rw] = await Promise.all([pa, pw]);
+    h.restore();
+    assert.equal(ra.status, 500);
+    assert.equal(rw.status, 200);
+    assert.equal(s.app.locals.state.outreach.templates["first-contact"].de.approvedAt, null);
+    assert.equal(onDisk(s).templates["first-contact"].de.approvedAt, null);
+  } finally { h.restore(); await s.close(); }
+});
+
+test("expired claims leave the file: status saves in the background, and start-up prunes too", async () => {
+  const s = await outreachApp();
+  try {
+    await s.addFlat("flat-1"); await s.approve("first-contact");
+    await s.claim({ listingId: "flat-1", templateId: "first-contact" });
+    assert.ok(onDisk(s).claims[0].text);
+    s.advance(25 * 60);
+    const st = await (await s.routine("GET", "/api/outreach/status")).json();
+    assert.equal(st.today.used, 0);
+    await tick(80);
+    const c = onDisk(s).claims[0];
+    assert.equal(c.status, "released");
+    assert.equal(c.releaseReason, "expired");
+    assert.equal(c.text, undefined);
+  } finally { await s.close(); }
+  const dir = fs.mkdtempSync(path.join(require("node:os").tmpdir(), "flat-hunt-test-"));
+  fs.writeFileSync(path.join(dir, "outreach.json"), JSON.stringify({ claims: [{ id: "0123456789abcdef", key: "x-1:first-contact", listingId: "x-1", templateId: "first-contact", lang: "de", version: 1, viewingId: null, via: "immowelt", claimedAt: "2026-10-20T08:00:00.000Z", status: "claimed", sentAt: null, releasedAt: null, text: "Guten Tag, Beispieltext" }] }));
+  const r = await outreachApp({ options: { dataDir: dir } });
+  try {
+    const c = onDisk(r).claims[0];
+    assert.equal(c.status, "released");
+    assert.equal(c.text, undefined);
+  } finally { await r.close(); }
+});

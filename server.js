@@ -22,7 +22,7 @@ const { loadCrimeTable } = require("./lib/crime");
 const { loadRentGrid } = require("./lib/rent-grid");
 const { OVERPASS_URL } = require("./lib/amenities");
 const { accessGate, requireSyncKey } = require("./lib/routine-auth");
-const { normaliseOutreach } = require("./lib/outreach");
+const { normaliseOutreach, prune: pruneClaims } = require("./lib/outreach");
 const { outreachApi } = require("./lib/outreach-api");
 const { createRateLimiter } = require("./lib/ratelimit");
 const CATALOGUE = require("./public/redflags.json");
@@ -57,7 +57,11 @@ function createApp(options = {}) {
     shares: (readJson(files.shares, { shares: [] }).shares) || [],
     outreach: normaliseOutreach(readJson(files.outreach, null), now())
   };
-  if (!fs.existsSync(files.outreach)) fs.writeFileSync(files.outreach, JSON.stringify(state.outreach));
+  // Claims nobody reported on for a day lose their text on start-up, too.
+  const loadedClaims = state.outreach.claims, prunedClaims = pruneClaims(loadedClaims, now());
+  const claimsChanged = prunedClaims.length !== loadedClaims.length || prunedClaims.some((c, i) => c !== loadedClaims[i]);
+  state.outreach.claims = prunedClaims;
+  if (!fs.existsSync(files.outreach) || claimsChanged) fs.writeFileSync(files.outreach, JSON.stringify(state.outreach));
   if (!state.listings) {
     state.listings = {};
     if (process.env.SEED === "1") {

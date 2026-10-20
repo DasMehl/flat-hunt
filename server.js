@@ -7,6 +7,7 @@ const { readJson, writeJsonAtomic } = require("./lib/store");
 const { validateProfile } = require("./lib/profile");
 const { geocode } = require("./lib/geo");
 const { commuteFor } = require("./lib/commute");
+const { createCommuteJob } = require("./lib/commute-job");
 const { validateListingInput, requiredErrors } = require("./lib/listing");
 const { warmRent } = require("./public/money");
 const { headline, historyEntry, applySeen } = require("./lib/price-sync");
@@ -86,8 +87,11 @@ function createApp(options = {}) {
   let writingShares = Promise.resolve();
   const persistShares = () => (writingShares = writingShares.catch(() => {}).then(() => writeJsonAtomic(files.shares, { shares: state.shares })));
 
+  const commuteJob = createCommuteJob({ state, persist: () => persist(), commuteFor, fetchImpl: () => app.locals.fetchImpl, pauseMs, sleep, now });
+
   const app = express();
   app.locals.state = state;
+  app.locals.commuteJob = commuteJob;
   app.locals.files = files;
   app.locals.persist = persist;
   app.locals.fetchImpl = options.fetchImpl || globalThis.fetch;
@@ -117,38 +121,9 @@ function createApp(options = {}) {
 
   app.get("/api/listings", (req, res) => res.json({ listings: state.listings, updatedAt: new Date().toISOString() }));
 
-  // Registered before every /api/listings/:id route so it is never read as an id.
-  app.post("/api/listings/recalc-commute", async (req, res) => {
-    const places = (state.profile && state.profile.places) || [];
-    const results = new Map();
-    let first = true;
-    for (const [id, c] of Object.entries(state.listings)) {
-      if (typeof c.lat !== "number" || typeof c.lon !== "number") continue;
-      if (places.length) { if (!first) await sleep(pauseMs); first = false; }
-      results.set(id, await commuteFor({ lat: c.lat, lon: c.lon }, places, app.locals.fetchImpl, { pauseMs }));
-    }
-    // Applied without awaiting, so a concurrent edit or delete cannot interleave.
-    const before = [];
-    for (const [id, c] of Object.entries(state.listings)) {
-      before.push([c, c.commute, c.commuteStale, c.mapsUrl]);
-      if (results.has(id)) {
-        c.commute = results.get(id);
-        if (places.length) c.mapsUrl = "https://www.google.com/maps/dir/?api=1&origin=" + encodeURIComponent(places[0].address) + `&destination=${c.lat},${c.lon}`;
-      }
-      else if (c.commute !== undefined) c.commute = places.map(() => null);
-      delete c.commuteStale;
-    }
-    try { await persist(); }
-    catch (e) {
-      for (const [c, commute, stale, maps] of before) {
-        if (maps === undefined) delete c.mapsUrl; else c.mapsUrl = maps;
-        if (commute === undefined) delete c.commute; else c.commute = commute;
-        if (stale === undefined) delete c.commuteStale; else c.commuteStale = stale;
-      }
-      return res.status(500).json({ error: "save failed" });
-    }
-    res.json({ ok: true, updated: results.size });
-  });
+  // Registered before every /api/listings/:id route so it is never read as an id. Runs in the background (lib/commute-job.js).
+  app.post("/api/listings/recalc-commute", (req, res) => res.status(202).json({ ok: true, ...commuteJob.start() }));
+  app.get("/api/commute/status", (req, res) => res.json(commuteJob.status()));
 
   app.get("/api/meta", (req, res) => res.json(state.meta));
 

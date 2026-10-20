@@ -938,16 +938,28 @@ footer.sources a { color: inherit; }
   }
 
   // ---------- commute out of date ----------
-  let recalcBusy = false, recalcError = false;
+  let recalcBusy = false, recalcError = false, recalcProgress = null;
   function renderStale() {
     const host = $("#stale"), stale = listings.some(c => c.commuteStale);
     host.hidden = !stale; host.innerHTML = ""; if (!stale) return;
     const txt = el("div"); txt.append(el("strong", null, T.staleTitle), el("span", null, " " + (recalcError ? T.recalcFail : T.staleText)));
-    const b = el("button", "btn", recalcBusy ? T.recalcing : T.recalc); b.type = "button"; b.disabled = recalcBusy;
+    const b = el("button", "btn", recalcBusy ? T.recalcing + (recalcProgress && recalcProgress.total ? ` ${recalcProgress.done}/${recalcProgress.total}` : "") : T.recalc); b.type = "button"; b.disabled = recalcBusy;
     b.onclick = async () => {
-      recalcBusy = true; recalcError = false; renderStale();
-      try { const r = await fetch("/api/listings/recalc-commute", { method: "POST" }); if (!r.ok) throw new Error(r.status); recalcBusy = false; await load(); }
-      catch (e) { recalcBusy = false; recalcError = true; renderStale(); }
+      recalcBusy = true; recalcError = false; recalcProgress = null; renderStale();
+      try {
+        const r = await fetch("/api/listings/recalc-commute", { method: "POST" });
+        if (r.status !== 202) throw new Error(r.status);
+        // The server works through the listings in the background; follow its status until it is done.
+        let st = await r.json();
+        while (st.running) {
+          await new Promise(res => setTimeout(res, 2000));
+          const s = await fetch("/api/commute/status", { cache: "no-store" });
+          if (!s.ok) throw new Error(s.status);
+          st = await s.json(); recalcProgress = st; renderStale();
+        }
+        recalcBusy = false; recalcProgress = null;
+        if (st.error) { recalcError = true; renderStale(); } else await load();
+      } catch (e) { recalcBusy = false; recalcProgress = null; recalcError = true; renderStale(); }
     };
     host.append(txt, b);
   }

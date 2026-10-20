@@ -542,7 +542,7 @@ test("changing the places marks every listing stale, other profile edits do not"
   } finally { await s.close(); }
 });
 
-test("recalc-commute is password only, recomputes every listing and clears the stale flag", async () => {
+test("recalc-commute is password only, runs in the background and clears the stale flag", async () => {
   const s = await start({ fetchImpl: geoFetch, pauseMs: 0 });
   try {
     const { id } = await addManual(s);
@@ -550,34 +550,61 @@ test("recalc-commute is password only, recomputes every listing and clears the s
     const p = homeProfile();
     await fetch(s.base + "/api/profile", { method: "PUT", headers: json(s.auth), body: JSON.stringify(p) });
     const r = await fetch(s.base + "/api/listings/recalc-commute", { method: "POST", headers: s.auth });
-    assert.equal(r.status, 200);
-    assert.deepEqual(await r.json(), { ok: true, updated: 1 });
+    assert.equal(r.status, 202);
+    const started = await r.json();
+    assert.equal(started.ok, true);
+    assert.equal(started.running, true);
+    await s.app.locals.commuteJob.idle();
+    const st = await (await fetch(s.base + "/api/commute/status", { headers: s.auth })).json();
+    assert.equal(st.running, false);
+    assert.equal(st.updated, 1);
+    assert.equal(st.error, null);
     const car = (await (await fetch(s.base + "/api/listings", { headers: s.auth })).json()).listings[id];
     assert.equal(car.commuteStale, undefined);
     assert.equal(car.commute.length, 1);
     assert.equal(car.commute[0].minutes, 32);
     // the sync key alone does not open it
     assert.equal((await fetch(s.base + "/api/listings/recalc-commute", { method: "POST", headers: { "x-sync-key": "key" } })).status, 403);
+    assert.equal((await fetch(s.base + "/api/commute/status")).status, 401);
   } finally { await s.close(); }
 });
 
-test("recalc-commute skips listings without coordinates and answers 500 when saving fails", async () => {
+test("recalc-commute skips listings without coordinates and reports a failed save in its status", async () => {
   const s = await start({ fetchImpl: geoFetch, pauseMs: 0 });
   try {
     await fetch(s.base + "/api/profile", { method: "PUT", headers: json(s.auth), body: JSON.stringify(homeProfile()) });
     const { id } = await addManual(s);
     await fetch(s.base + "/api/listings/nolocation", { method: "PUT", headers: s.sync, body: JSON.stringify({ title: "No coords" }) });
-    const ok = await (await fetch(s.base + "/api/listings/recalc-commute", { method: "POST", headers: s.auth })).json();
-    assert.equal(ok.updated, 1);
+    await fetch(s.base + "/api/listings/recalc-commute", { method: "POST", headers: s.auth });
+    await s.app.locals.commuteJob.idle();
+    assert.equal(s.app.locals.commuteJob.status().updated, 1);
     const p = homeProfile(); p.places[0].maxMin = 20;
     await fetch(s.base + "/api/profile", { method: "PUT", headers: json(s.auth), body: JSON.stringify(p) });
     fs.rmSync(path.join(s.dir, "listings.json"));
     fs.mkdirSync(path.join(s.dir, "listings.json"));
-    const r = await fetch(s.base + "/api/listings/recalc-commute", { method: "POST", headers: s.auth });
-    assert.equal(r.status, 500);
-    assert.deepEqual(await r.json(), { error: "save failed" });
+    assert.equal((await fetch(s.base + "/api/listings/recalc-commute", { method: "POST", headers: s.auth })).status, 202);
+    await s.app.locals.commuteJob.idle();
+    assert.equal(s.app.locals.commuteJob.status().error, "save failed");
     const cars = (await (await fetch(s.base + "/api/listings", { headers: s.auth })).json()).listings;
     assert.equal(cars[id].commuteStale, true);
+  } finally { await s.close(); }
+});
+
+test("a second recalc during a run is answered with the running status and runs once more afterwards", async () => {
+  let calls = 0;
+  const slowFetch = async (url, opts) => { if (String(url).includes("router.project-osrm.org")) { calls++; await new Promise(r => setTimeout(r, 20)); } return geoFetch(url, opts); };
+  const s = await start({ fetchImpl: slowFetch, pauseMs: 0 });
+  try {
+    await addManual(s);
+    await fetch(s.base + "/api/profile", { method: "PUT", headers: json(s.auth), body: JSON.stringify(homeProfile()) });
+    calls = 0;
+    await fetch(s.base + "/api/listings/recalc-commute", { method: "POST", headers: s.auth });
+    const second = await (await fetch(s.base + "/api/listings/recalc-commute", { method: "POST", headers: s.auth })).json();
+    assert.equal(second.running, true);
+    assert.equal(second.again, true);
+    await s.app.locals.commuteJob.idle();
+    assert.equal(calls, 2);
+    assert.equal(s.app.locals.commuteJob.status().again, false);
   } finally { await s.close(); }
 });
 
@@ -672,6 +699,7 @@ test("recalc-commute also refreshes the maps link", async () => {
     assert.equal((await getListing(s, id)).mapsUrl, undefined);
     await fetch(s.base + "/api/profile", { method: "PUT", headers: json(s.auth), body: JSON.stringify(homeProfile()) });
     await fetch(s.base + "/api/listings/recalc-commute", { method: "POST", headers: s.auth });
+    await s.app.locals.commuteJob.idle();
     assert.match((await getListing(s, id)).mapsUrl, /origin=K%C3%B6nigsallee.*destination=51\.4556,7\.0116$/);
   } finally { await s.close(); }
 });

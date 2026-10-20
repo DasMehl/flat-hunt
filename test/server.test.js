@@ -557,7 +557,7 @@ test("recalc-commute is password only, recomputes every listing and clears the s
     assert.equal(car.commute.length, 1);
     assert.equal(car.commute[0].minutes, 32);
     // the sync key alone does not open it
-    assert.equal((await fetch(s.base + "/api/listings/recalc-commute", { method: "POST", headers: { "x-sync-key": "key" } })).status, 401);
+    assert.equal((await fetch(s.base + "/api/listings/recalc-commute", { method: "POST", headers: { "x-sync-key": "key" } })).status, 403);
   } finally { await s.close(); }
 });
 

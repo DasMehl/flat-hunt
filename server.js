@@ -3,7 +3,6 @@ const { publicShares } = require("./lib/share-public");
 const express = require("express");
 const fs = require("fs");
 const path = require("path");
-const crypto = require("crypto");
 const { readJson, writeJsonAtomic } = require("./lib/store");
 const { validateProfile } = require("./lib/profile");
 const { geocode } = require("./lib/geo");
@@ -20,6 +19,7 @@ const { createSpacer } = require("./lib/area-http");
 const { loadCrimeTable } = require("./lib/crime");
 const { loadRentGrid } = require("./lib/rent-grid");
 const { OVERPASS_URL } = require("./lib/amenities");
+const { accessGate, requireSyncKey } = require("./lib/routine-auth");
 
 const STATUSES = ["new", "contacted", "viewing-invited", "viewing-done", "applied", "docs-requested", "accepted", "rejected", "dropped", "gone"];
 // Fields the routine may write with the sync key (PUT /api/listings/:id). Owner fields stay page-only.
@@ -107,24 +107,9 @@ function createApp(options = {}) {
 
   app.get("/healthz", (req, res) => res.type("text").send("ok"));
 
-  if (password) {
-    app.use((req, res, next) => {
-      const [scheme, b64] = (req.headers.authorization || "").split(" ");
-      const pass = scheme === "Basic" && b64 ? Buffer.from(b64, "base64").toString().split(":").slice(1).join(":") : "";
-      const a = Buffer.from(pass), b = Buffer.from(password);
-      if (a.length === b.length && crypto.timingSafeEqual(a, b)) return next();
-      // Header values must be Latin-1; keep printable ASCII only so any profile name is safe.
-      const realm = String(state.profile && state.profile.name || "").replace(/[^\x20-\x7e]/g, "").replace(/"/g, "").trim() || "Flat Hunt";
-      res.set("WWW-Authenticate", `Basic realm="${realm}"`);
-      res.status(401).send("Password required");
-    });
-  }
-
-  const requireKey = (req, res, next) => {
-    if (!syncKey) return res.status(503).json({ error: "SYNC_KEY not configured" });
-    if (req.headers["x-sync-key"] !== syncKey) return res.status(401).json({ error: "bad sync key" });
-    next();
-  };
+  // The owner signs in with the password; the routine sends only the sync key and reaches only its own routes (lib/routine-auth.js).
+  app.use(accessGate({ password, syncKey, realm: () => state.profile && state.profile.name }));
+  const requireKey = requireSyncKey(syncKey);
   app.locals.requireKey = requireKey;
   app.use(vaultApi({ state, vault, vaultStatus: vault ? "ready" : vStatus === "empty" ? "off" : vStatus, persist, persistShares, now }));
   app.use(areaApi({ state, queue: areaQueue }));

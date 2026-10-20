@@ -361,7 +361,7 @@ test("a failed approval save never re-approves a version edited meanwhile", asyn
   } finally { await s.close(); }
 });
 
-test("claims older than 24 hours are released as expired without their text", async () => {
+test("claims older than 24 hours are closed as skipped and expired, without their text, and log a skipped line", async () => {
   const s = await outreachApp();
   try {
     await s.addFlat("flat-1"); await s.approve("first-contact");
@@ -369,10 +369,14 @@ test("claims older than 24 hours are released as expired without their text", as
     s.advance(25 * 60);
     await s.routine("GET", "/api/outreach/status");
     const c = s.app.locals.state.outreach.claims.find(x => x.id === claim.id);
-    assert.equal(c.status, "released");
-    assert.equal(c.releaseReason, "expired");
+    assert.equal(c.status, "skipped");
+    assert.equal(c.reason, "expired");
     assert.equal(c.text, undefined);
-    assert.equal((await s.claim({ listingId: "flat-1", templateId: "first-contact" })).status, 201);
+    const logged = s.app.locals.state.meta.log.find(e => e.type === "skipped" && e.id === "flat-1");
+    assert.equal(logged.template, "first-contact");
+    const after = await s.claim({ listingId: "flat-1", templateId: "first-contact" });
+    assert.equal(after.status, 409, "an expired claim blocks its slot for good");
+    assert.equal((await after.json()).reason, "already-contacted");
     assert.equal(JSON.parse(fs.readFileSync(path.join(s.dir, "outreach.json"), "utf8")).claims.find(x => x.id === claim.id).text, undefined);
   } finally { await s.close(); }
 });
@@ -485,16 +489,27 @@ test("expired claims leave the file: status saves in the background, and start-u
     assert.equal(st.today.used, 0);
     await tick(80);
     const c = onDisk(s).claims[0];
-    assert.equal(c.status, "released");
-    assert.equal(c.releaseReason, "expired");
+    assert.equal(c.status, "skipped");
+    assert.equal(c.reason, "expired");
     assert.equal(c.text, undefined);
+    assert.ok(JSON.parse(fs.readFileSync(path.join(s.dir, "meta.json"), "utf8")).log.some(e => e.type === "skipped" && e.id === "flat-1"), "the log line is saved too");
   } finally { await s.close(); }
   const dir = fs.mkdtempSync(path.join(require("node:os").tmpdir(), "flat-hunt-test-"));
   fs.writeFileSync(path.join(dir, "outreach.json"), JSON.stringify({ claims: [{ id: "0123456789abcdef", key: "x-1:first-contact", listingId: "x-1", templateId: "first-contact", lang: "de", version: 1, viewingId: null, via: "immowelt", claimedAt: "2026-10-20T08:00:00.000Z", status: "claimed", sentAt: null, releasedAt: null, text: "Guten Tag, Beispieltext" }] }));
   const r = await outreachApp({ options: { dataDir: dir } });
   try {
     const c = onDisk(r).claims[0];
-    assert.equal(c.status, "released");
+    assert.equal(c.status, "skipped");
     assert.equal(c.text, undefined);
   } finally { await r.close(); }
+});
+
+test("prune leaves a claim alone while a request is still changing it", () => {
+  const { prune } = require("../lib/outreach");
+  const claim = { id: "0123456789abcdef", key: "x:first-contact", listingId: "x", templateId: "first-contact", status: "claimed", claimedAt: "2026-10-20T08:00:00.000Z", text: "t" };
+  const now = new Date("2026-10-22T08:00:00.000Z"), expired = [];
+  assert.equal(prune([claim], now, new Set([claim.id]), expired)[0], claim);
+  assert.equal(expired.length, 0);
+  assert.equal(prune([claim], now, new Set(), expired)[0].status, "skipped");
+  assert.equal(expired.length, 1);
 });

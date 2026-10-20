@@ -11,7 +11,7 @@ The site stores and shows flats. Finding new listings, logging landlord replies 
 
 ## What it never does
 
-- It never sends a template you have not approved, and never the same template twice to the same listing. Before every message it checks the listing, the portal inboxes and your email for an earlier contact with the landlord and sends nothing if there is one.
+- It never sends a template you have not approved, and never the same template twice to the same listing. Before every message it checks the listing, the portal inboxes and your email for a message that already does the same job for this flat (for a first contact: any earlier contact about it) and sends nothing if there is one. If it cannot tell, for example a housing company that has written to you about other flats, it does not send and lists the listing under "check manually".
 - It never sends a viewing confirmation for a viewing you have not confirmed. Confirming or declining viewings is yours.
 - It never sends, attaches or links documents, and cannot create share links: only you can, on the site. A documents request from a landlord is only recorded on the listing.
 - It never edits templates, approvals, statuses, notes or viewing decisions: its key does not reach those routes.
@@ -36,8 +36,9 @@ The site stores and shows flats. Finding new listings, logging landlord replies 
    ```
 
 4. Copy `routine/SKILL.md` to `~/.claude/scheduled-tasks/flat-hunt-listing-check/SKILL.md` and replace `https://YOUR-SITE.up.railway.app` with your site's address.
-5. In the Claude desktop app, create a scheduled task from it, for example every 3 hours during the day.
-6. The routine only runs while the computer is awake, and its browser must be logged in to the portals and your email and connected to Claude. Pausing in the page header only stops sending; to stop the routine completely, disable the scheduled task in the Claude desktop app.
+5. Keep each saved search to three result pages or fewer (narrow the filters). The routine reads at most three pages per search; if a search has more, it cannot tell which listings disappeared and never marks any as gone.
+6. In the Claude desktop app, create a scheduled task from it, for example every 3 hours during the day.
+7. The routine only runs while the computer is awake, and its browser must be logged in to the portals and your email and connected to Claude. Pausing in the page header only stops sending; to stop the routine completely, disable the scheduled task in the Claude desktop app.
 
 ## Sending messages
 
@@ -48,7 +49,7 @@ Nothing is sent until you:
 
 The pause switch in the page header ("Sending on" / "Sending paused") stops new sends: the server refuses every new send slot while it is paused, and the routine checks the switch right before every send. A message that is already being sent when you pause can still go out. The header also shows how many messages went out today against your daily limit.
 
-A send slot (claim) that the routine does not use within 24 hours expires. If the routine cannot record or confirm a sent message, it tells you in its report ("check manually") and does not send it again.
+A send slot (claim) that the routine does not report on within 24 hours expires and then blocks that message for that listing for good, because a send may have happened. You see it in the update log as skipped and can contact the landlord yourself. If the routine cannot record or confirm a sent message, it tells you in its report ("check manually") and does not send it again.
 
 The routine first contacts only shortlisted listings that meet all your criteria. Every outgoing message appears on the listing with its template and version.
 

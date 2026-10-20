@@ -22,7 +22,7 @@ const { loadCrimeTable } = require("./lib/crime");
 const { loadRentGrid } = require("./lib/rent-grid");
 const { OVERPASS_URL } = require("./lib/amenities");
 const { accessGate, requireSyncKey } = require("./lib/routine-auth");
-const { normaliseOutreach, prune: pruneClaims } = require("./lib/outreach");
+const { normaliseOutreach, prune: pruneClaims, expiredLog } = require("./lib/outreach");
 const { outreachApi } = require("./lib/outreach-api");
 const { repliesApi } = require("./lib/replies-api");
 const { createRateLimiter } = require("./lib/ratelimit");
@@ -59,9 +59,10 @@ function createApp(options = {}) {
     outreach: normaliseOutreach(readJson(files.outreach, null), now())
   };
   // Claims nobody reported on for a day lose their text on start-up, too.
-  const loadedClaims = state.outreach.claims, prunedClaims = pruneClaims(loadedClaims, now());
+  const loadedClaims = state.outreach.claims, expiredClaims = [], prunedClaims = pruneClaims(loadedClaims, now(), new Set(), expiredClaims);
   const claimsChanged = prunedClaims.length !== loadedClaims.length || prunedClaims.some((c, i) => c !== loadedClaims[i]);
   state.outreach.claims = prunedClaims;
+  if (expiredClaims.length) { state.meta.log = [...expiredLog(expiredClaims, state.listings || {}, now()), ...(state.meta.log || [])].slice(0, 200); fs.writeFileSync(files.meta, JSON.stringify(state.meta)); }
   if (!fs.existsSync(files.outreach) || claimsChanged) fs.writeFileSync(files.outreach, JSON.stringify(state.outreach));
   if (!state.listings) {
     state.listings = {};

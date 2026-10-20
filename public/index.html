@@ -163,7 +163,7 @@ aside select { width: 100%; background: var(--surface); border: 1px solid var(--
 .welcome-actions { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; margin-top: 6px; }
 .welcome-actions .btn { height: 40px; padding: 0 18px; border-radius: 999px; font-size: 14px; }
 .ring.est .n { font-size: 15px; }
-.rowmain { min-width: 0; display: grid; gap: 5px; }
+.rowmain { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 5px; }
 .rowmain h2 { font-size: 16.5px; font-weight: 600; line-height: 1.25; display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: baseline; }
 .rowmain h2 .ctype { font: 500 11.5px/1 var(--body); letter-spacing: 0; padding: 4px 7px; border-radius: 5px; background: var(--info-bg); color: var(--info); }
 .rowmain h2 .ctype.p { background: var(--surface-3); color: var(--muted); }
@@ -172,7 +172,7 @@ aside select { width: 100%; background: var(--surface); border: 1px solid var(--
 .facts { display: flex; flex-wrap: wrap; gap: 5px 6px; }
 .fact { font-size: 12.5px; padding: 3px 8px; border-radius: 6px; font-weight: 500; background: var(--surface-2); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .fact.good { background: var(--good-bg); color: var(--good); } .fact.warn { background: var(--warn-bg); color: var(--warn); } .fact.bad { background: var(--bad-bg); color: var(--bad); }
-.fact.unk { background: var(--surface-2); color: var(--muted); }
+.fact.unk { background: var(--surface-2); color: var(--muted); white-space: normal; text-align: left; }
 .fact.stale { border: 1px dashed var(--warn); }
 .linkish { border: 0; cursor: pointer; font: inherit; text-decoration: underline; text-underline-offset: 2px; }
 .cost-note .linkish { background: none; color: var(--accent); padding: 0; font-size: 12px; }
@@ -197,7 +197,7 @@ aside select { width: 100%; background: var(--surface); border: 1px solid var(--
 .compare-toggle[aria-pressed="true"] { background: var(--info-bg); color: var(--info); border-color: var(--info); }
 .compare-toggle:disabled { opacity: .45; cursor: not-allowed; }
 .cards { container-type: inline-size; }
-@container (max-width: 720px) { .row { grid-template-columns: 96px 1fr; } .row .thumb { width: 96px; } .rowside { grid-column: 1 / -1; grid-template-columns: auto 1fr auto; justify-items: start; } .ring { grid-row: auto; } }
+@container (max-width: 720px) { .row { grid-template-columns: 96px 1fr; } .row .thumb { width: 96px; } .rowside { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-start; min-width: 0; } .rowside > * { max-width: 100%; } .ring { grid-row: auto; } }
 
 .detail { border-top: 1px solid var(--line); }
 .dhead { display: grid; grid-template-columns: 320px 1fr; }
@@ -324,7 +324,8 @@ tr:last-child td { border-bottom: 0; }
   .rowmain h2 { font-size: 15.5px; }
   .rowmain .line2 { white-space: normal; font-size: 12.5px; }
   .fact { font-size: 12px; padding: 3px 7px; } .fact.price { font-size: 13.5px; }
-  .rowside { grid-column: 1 / -1; grid-template-columns: auto 1fr auto; justify-items: start; }
+  .rowside { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-start; min-width: 0; }
+  .rowside > * { max-width: 100%; }
   .ring { grid-row: auto; width: 44px; height: 44px; } .ring svg { width: 44px; height: 44px; } .ring .n { font-size: 14px; }
   .dfacts, .col { padding: 12px; }
   .travel { grid-template-columns: 1fr 1fr; }
@@ -1300,7 +1301,7 @@ footer.sources a { color: inherit; }
     const fr = el("div", "row2"); const fW = el("div"); const fl = el("label", null, T.fromL); fl.htmlFor = "from-" + c.id; const fi = el("input"); fi.id = "from-" + c.id; fi.value = (c.contact && c.contact.name) || ""; fW.append(fl, fi);
     const vW = el("div"); const vl = el("label", null, T.via); vl.htmlFor = "via-" + c.id; const vi = el("select"); vi.id = "via-" + c.id; T.vias.forEach(v => vi.append(el("option", null, v))); vW.append(vl, vi); fr.append(fW, vW);
     const tW = el("div"); const txl = el("label", null, T.said); txl.htmlFor = "reply-" + c.id; const tx = el("textarea"); tx.id = "reply-" + c.id; tW.append(txl, tx);
-    const sb = el("button", "btn primary", T.add); sb.type = "button"; sb.onclick = () => { if (!tx.value.trim()) { tx.focus(); return; } const patch = { messages: [...(c.messages || []), { date: new Date().toISOString(), dir: "in", from: fi.value || (c.contact && c.contact.name) || "", via: vi.value, text: tx.value.trim() }] }; openReply[c.id] = false; save(c.id, patch, note); };
+    const sb = el("button", "btn primary", T.add); sb.type = "button"; sb.onclick = () => { if (!tx.value.trim()) { tx.focus(); return; } const message = { date: new Date().toISOString(), dir: "in", from: fi.value || (c.contact && c.contact.name) || "", via: vi.value, text: tx.value.trim() }; openReply[c.id] = false; addMessage(c.id, message, note); };
     form.append(fr, tW, sb); rb.onclick = () => { openReply[c.id] = !openReply[c.id]; form.classList.toggle("open", openReply[c.id]); rb.textContent = openReply[c.id] ? T.cancel : T.logReply; if (openReply[c.id]) tx.focus(); };
     const acts = el("div", "lactions");
     const eb = el("button", "btn", T.edit); eb.type = "button"; eb.onclick = () => Setup.editListing({ listing: c, lang, onSaved: () => { expanded.add(c.id); load(); } });
@@ -1351,11 +1352,14 @@ footer.sources a { color: inherit; }
 
   // ---------- saving ----------
   let saving = Promise.resolve();
-  function save(id, patch, noteEl) {
-    saving = saving.then(() => fetch("/api/listings/" + encodeURIComponent(id), { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) }).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); }))
+  function send(id, method, path, body, noteEl) {
+    saving = saving.then(() => fetch("/api/listings/" + encodeURIComponent(id) + path, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); }))
       .then(j => { raw[id] = j.listing; listings = toList(raw); render(); const n = noteEl && (document.querySelector(`#listing-${CSS.escape(id)} .saved`) || noteEl); if (n) { n.textContent = T.saved; setTimeout(() => n.textContent = "", 1500); } })
       .catch(e => { if (noteEl) noteEl.textContent = T.saveFail; });
   }
+  const save = (id, patch, noteEl) => send(id, "PATCH", "", patch, noteEl);
+  // Appended on the server, so messages the routine logged meanwhile are never overwritten by this page's copy.
+  const addMessage = (id, message, noteEl) => send(id, "POST", "/messages", message, noteEl);
   function removeListing(c, noteEl) {
     if (!confirm(T.confirmDelete(titleOf(c)))) return;
     saving = saving.then(() => fetch("/api/listings/" + encodeURIComponent(c.id), { method: "DELETE" }).then(r => { if (!r.ok) throw new Error(r.status); }))

@@ -22,6 +22,10 @@ const { loadCrimeTable } = require("./lib/crime");
 const { loadRentGrid } = require("./lib/rent-grid");
 const { OVERPASS_URL } = require("./lib/amenities");
 const { accessGate, requireSyncKey } = require("./lib/routine-auth");
+const { normaliseOutreach } = require("./lib/outreach");
+const { outreachApi } = require("./lib/outreach-api");
+const { createRateLimiter } = require("./lib/ratelimit");
+const CATALOGUE = require("./public/redflags.json");
 
 const STATUSES = ["new", "contacted", "viewing-invited", "viewing-done", "applied", "docs-requested", "accepted", "rejected", "dropped", "gone"];
 // Fields the routine may write with the sync key (PUT /api/listings/:id). Owner fields stay page-only.
@@ -37,7 +41,7 @@ function createApp(options = {}) {
   const password = options.password ?? process.env.SITE_PASSWORD ?? "";
   const syncKey = options.syncKey ?? process.env.SYNC_KEY ?? "";
   const seedFile = options.seedFile || path.join(__dirname, "seed.json");
-  const files = { listings: path.join(dataDir, "listings.json"), meta: path.join(dataDir, "meta.json"), profile: path.join(dataDir, "profile.json"), shares: path.join(dataDir, "shares.json") };
+  const files = { listings: path.join(dataDir, "listings.json"), meta: path.join(dataDir, "meta.json"), profile: path.join(dataDir, "profile.json"), shares: path.join(dataDir, "shares.json"), outreach: path.join(dataDir, "outreach.json") };
   fs.mkdirSync(path.join(dataDir, "img"), { recursive: true });
   const now = options.now || (() => new Date());
   // The vault opens only with the right key; otherwise its routes answer 503 (the start-up check refuses to run in that case).
@@ -50,8 +54,10 @@ function createApp(options = {}) {
     listings: readJson(files.listings, null),
     meta: readJson(files.meta, { lastCheck: null, log: [] }),
     profile: upgradeProfile(readJson(files.profile, null)),
-    shares: (readJson(files.shares, { shares: [] }).shares) || []
+    shares: (readJson(files.shares, { shares: [] }).shares) || [],
+    outreach: normaliseOutreach(readJson(files.outreach, null), now())
   };
+  if (!fs.existsSync(files.outreach)) fs.writeFileSync(files.outreach, JSON.stringify(state.outreach));
   if (!state.listings) {
     state.listings = {};
     if (process.env.SEED === "1") {
@@ -87,6 +93,9 @@ function createApp(options = {}) {
   let writingShares = Promise.resolve();
   const persistShares = () => (writingShares = writingShares.catch(() => {}).then(() => writeJsonAtomic(files.shares, { shares: state.shares })));
 
+  let writingOutreach = Promise.resolve();
+  const persistOutreach = () => (writingOutreach = writingOutreach.catch(() => {}).then(() => writeJsonAtomic(files.outreach, state.outreach)));
+
   const commuteJob = createCommuteJob({ state, persist: () => persist(), commuteFor, fetchImpl: () => app.locals.fetchImpl, pauseMs, sleep, now });
 
   const app = express();
@@ -94,6 +103,7 @@ function createApp(options = {}) {
   app.locals.commuteJob = commuteJob;
   app.locals.files = files;
   app.locals.persist = persist;
+  app.locals.persistOutreach = persistOutreach;
   app.locals.fetchImpl = options.fetchImpl || globalThis.fetch;
   app.locals.vault = vault;
   app.locals.areaQueue = areaQueue;
@@ -108,6 +118,8 @@ function createApp(options = {}) {
   // Before body parsing, so a body sent to /s can never produce a different answer than the uniform 404.
   // Share links are public; everything registered after the password check is not.
   app.use("/s", publicShares({ state, vault, persistShares, now, rateLimit: options.shareRateLimit }));
+  // Templates, send slots, replies and viewing decisions carry small JSON bodies only.
+  app.use(["/api/templates", "/api/outreach", "/api/listings/:id/replies", "/api/listings/:id/viewings"], express.json({ limit: "64kb" }));
   app.use(express.json({ limit: "4mb" }));
 
   app.get("/healthz", (req, res) => res.type("text").send("ok"));
@@ -118,6 +130,9 @@ function createApp(options = {}) {
   app.locals.requireKey = requireKey;
   app.use(vaultApi({ state, vault, vaultStatus: vault ? "ready" : vStatus === "empty" ? "off" : vStatus, persist, persistShares, now }));
   app.use(areaApi({ state, queue: areaQueue }));
+  // Claims, "sent" reports and replies from the routine share one limit (default 60 a minute).
+  const routineLimiter = createRateLimiter({ limit: 60, windowMs: 60000, ...(options.routineRateLimit || {}) });
+  app.use(outreachApi({ state, vault, persist, persistOutreach, saveProfile: v => writeJsonAtomic(files.profile, v), now, catalogue: CATALOGUE, requireKey, limiter: routineLimiter }));
 
   app.get("/api/listings", (req, res) => res.json({ listings: state.listings, updatedAt: new Date().toISOString() }));
 

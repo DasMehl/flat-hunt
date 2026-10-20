@@ -90,3 +90,12 @@ test("zensusGridFromCsv builds a dense cent grid from 1 km cell midpoints", () =
   assert.equal(grid.readUInt16LE((1 * 3 + 2) * 2), 821);
   assert.equal(grid.readUInt16LE((1 * 3 + 1) * 2), 0);
 });
+
+test("--file without a value is a usage error with exit code 1", () => {
+  const { spawnSync } = require("node:child_process");
+  for (const what of ["pks", "zensus"]) {
+    const r = spawnSync(process.execPath, [require.resolve("../scripts/area-data"), what, "--file"], { encoding: "utf8" });
+    assert.equal(r.status, 1, what);
+    assert.match(r.stderr, /usage/);
+  }
+});

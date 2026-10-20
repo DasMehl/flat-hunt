@@ -84,3 +84,58 @@ test("a failed save rolls the area back", async () => {
   q.enqueue("a"); await q.idle();
   assert.equal(state.listings.a.area.computedAt, "old");
 });
+
+test("cached amenities carry the cache entry's time as fetchedAt, fresh ones the current time", async () => {
+  const os = require("node:os"), path = require("node:path"), fs = require("node:fs");
+  const { createAreaCache } = require("../lib/area-cache");
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "area-cache-"));
+  const t0 = new Date("2026-10-01T08:00:00Z");
+  const cache = createAreaCache(path.join(dir, "c.json"), { now: () => t0 });
+  const first = await computeArea(KOE, deps(areaFetch(), { cache, now: () => t0 }));
+  assert.equal(first.amenities.cached, false);
+  assert.equal(first.amenities.fetchedAt, t0.toISOString());
+  const second = await computeArea(KOE, deps(areaFetch(), { cache, now: () => NOW }));
+  assert.equal(second.amenities.cached, true);
+  assert.equal(second.amenities.fetchedAt, t0.toISOString());
+  assert.equal(second.flood.fetchedAt, NOW.toISOString());
+  const forced = await computeArea(KOE, deps(areaFetch(), { cache, now: () => NOW, force: true }));
+  assert.equal(forced.amenities.fetchedAt, NOW.toISOString());
+});
+
+test("the Berlin noise figure carries the uncovered kinds through", async () => {
+  const f = async (url, init) => /gdi\.berlin\.de/.test(url) ? { ok: true, status: 200, headers: { get: () => null }, text: async () => '{"features":[]}' }
+    : areaFetch({ kreis: "11000" })(url, init);
+  const KB = require("../lib/kreis");
+  const wrap = async (url, init) => /sgx/.test(url) ? { ok: true, status: 200, headers: { get: () => null }, text: async () => JSON.stringify({ features: [{ properties: { ags: "11000", gen: "Berlin", bez: "Kreisfreie Stadt" } }] }) } : f(url, init);
+  void KB;
+  const a = await computeArea({ lat: 52.52, lon: 13.405 }, deps(wrap));
+  assert.equal(a.noise.status, "ok");
+  assert.deepEqual(a.noise.uncovered, ["rail"]);
+});
+
+test("queue: a pause between listings applies to slow sources only; a crashing compute does not kill the loop; forced is cleared for coordinate-less listings", async () => {
+  const state = { listings: { a: { lat: 1, lon: 1 }, b: { lat: 2, lon: 2 }, n: { title: "x" } } };
+  const sleeps = [];
+  const q = createAreaQueue({ state, persist: async () => {}, compute: async p => ({ lat: p.lat, lon: p.lon, computedAt: "x" }), gapMs: 1500, sleep: async ms => { sleeps.push(ms); } });
+  q.enqueue("a"); q.enqueue("b"); await q.idle();
+  assert.deepEqual(sleeps, [1500], "one gap between two listings, none after the last");
+  const quick = createAreaQueue({ state, persist: async () => {}, compute: async p => ({ lat: p.lat, lon: p.lon }), sleep: async () => { throw new Error("no gap expected"); } });
+  quick.enqueue("a"); quick.enqueue("b"); await quick.idle();
+
+  const seen = [];
+  const crash = createAreaQueue({ state, persist: async () => { throw new Error("boom"); }, compute: async (p, o) => { seen.push(o.force); return { lat: p.lat, lon: p.lon }; } });
+  crash.enqueue("n", { force: true }); await crash.idle();
+  Object.assign(state.listings.n, { lat: 3, lon: 3 });
+  crash.enqueue("n"); await crash.idle();
+  assert.deepEqual(seen, [false], "n's forced flag did not leak to its next run");
+});
+
+test("queue: an unexpected error in the loop resets it so later enqueues still run", async () => {
+  const state = { listings: { a: { lat: 1, lon: 1 } } };
+  let n = 0;
+  const q = createAreaQueue({ state, persist: async () => {}, compute: async p => ({ lat: p.lat, lon: p.lon }), sleep: async () => {} });
+  Object.defineProperty(state.listings, "z", { get() { if (n++ === 0) throw new Error("getter failed"); return undefined; }, enumerable: true, configurable: true });
+  q.enqueue("z"); await q.idle();
+  q.enqueue("a"); await q.idle();
+  assert.equal(state.listings.a.area.lat, 1);
+});

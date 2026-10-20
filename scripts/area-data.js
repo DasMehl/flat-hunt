@@ -166,6 +166,7 @@ function write(name, data, max) {
 
 async function main(argv) {
   const [what] = argv, fi = argv.indexOf("--file"), file = fi >= 0 ? argv[fi + 1] : null;
+  if (fi >= 0 && (!file || file.startsWith("--"))) { console.error("--file needs a value\nusage: node scripts/area-data.js pks|zensus [--file <downloaded file>]"); process.exit(1); }
   if (what === "pks") {
     const buf = file ? fs.readFileSync(file) : await download(PKS_URL);
     const table = pksFromRows(xlsxRows(buf), { year: 2025 });

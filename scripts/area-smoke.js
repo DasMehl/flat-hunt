@@ -15,7 +15,7 @@ if (!Number.isFinite(lat) || !Number.isFinite(lon)) { console.error("usage: node
 const summary = {
   kreis: a => `${a.ags} ${a.name}`,
   flood: a => `zones ${a.zones.join(",")} (worst ${a.worst})`,
-  noise: a => `${a.source} band ${a.band} dB, ${a.dominant} (${a.state})`,
+  noise: a => a.band ? `${a.source} band ${a.band} dB, ${a.dominant} (${a.state})` : `${a.source} below 55 dB (${a.state})`,
   crime: a => `${a.kreis} (${a.kind}) total ${a.hz.total}/100k, ratio ${a.ratio.total}`,
   rent: a => `${a.eurPerSqm} EUR/m2 net cold, existing tenancies (Zensus ${a.year})`,
   amenities: a => `${Object.keys(a.items).length} categories, routing ${a.routing}, ` +

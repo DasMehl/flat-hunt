@@ -74,7 +74,7 @@ function createApp(options = {}) {
     cache: createAreaCache(path.join(dataDir, "area-cache.json"), { now })
   };
   const areaQueue = createAreaQueue({
-    state, persist: () => persist(),
+    state, persist: () => persist(), gapMs: ao.gapMs ?? (ao.sleep ? 0 : 1500), sleep: ao.sleep,
     compute: (point, { force }) => {
       if (crimeTable === undefined) crimeTable = ao.crimeTable !== undefined ? ao.crimeTable : loadCrimeTable();
       if (rentGrid === undefined) rentGrid = ao.rentGrid !== undefined ? ao.rentGrid : loadRentGrid();

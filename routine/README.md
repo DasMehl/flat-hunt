@@ -49,7 +49,7 @@ Nothing is sent until you:
 
 The pause switch in the page header ("Sending on" / "Sending paused") stops new sends: the server refuses every new send slot while it is paused, and the routine checks the switch right before every send. A message that is already being sent when you pause can still go out. The header also shows how many messages went out today against your daily limit.
 
-A send slot (claim) that the routine does not report on within 24 hours expires and then blocks that message for that listing for good, because a send may have happened. You see it in the update log as skipped and can contact the landlord yourself. If the routine cannot record or confirm a sent message, it tells you in its report ("check manually") and does not send it again.
+A send slot (claim) that the routine does not report on within 24 hours expires and then blocks that message for that listing for good, because a send may have happened. You see it in the update log as "Expired, maybe sent: check" and can contact the landlord yourself. If the routine cannot record or confirm a sent message, it tells you in its report ("check manually") and does not send it again.
 
 The routine first contacts only shortlisted listings that meet all your criteria. Every outgoing message appears on the listing with its template and version.
 

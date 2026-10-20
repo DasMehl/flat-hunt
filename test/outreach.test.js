@@ -192,7 +192,14 @@ test("two claims at once never both pass the cap, the gap or once-per-listing", 
     const rs = await Promise.all([s.claim({ listingId: "b-1", templateId: "first-contact" }), s.claim({ listingId: "b-2", templateId: "first-contact" }), s.claim({ listingId: "b-1", templateId: "first-contact" })]);
     const codes = rs.map(r => r.status).sort();
     assert.equal(codes.filter(c => c === 201).length, 1);
-    assert.equal(s.app.locals.state.outreach.claims.length, 1);
+    const won = s.app.locals.state.outreach.claims[0].listingId;
+    assert.equal((await s.claim({ listingId: won, templateId: "first-contact" })).status, 200, "once saved, a duplicate gets the same slot");
+    s.advance(5);
+    await s.addFlat("b-3");
+    const dup = await Promise.all([s.claim({ listingId: "b-3", templateId: "first-contact" }), s.claim({ listingId: "b-3", templateId: "first-contact" })]);
+    assert.deepEqual(dup.map(r => r.status).sort(), [201, 409]);
+    assert.equal((await dup.find(r => r.status === 409).json()).reason, "busy", "a duplicate while the first save is pending is told to wait");
+    assert.equal(s.app.locals.state.outreach.claims.length, 2);
   } finally { await s.close(); }
 });
 
@@ -242,5 +249,174 @@ test("a claim released as already-contacted closes the listing for good without 
     assert.equal((await s.claim({ listingId: "c-2", templateId: "first-contact" })).status, 201, "no gap and no cap used by the skipped claim");
     const log = (await (await s.call("GET", "/api/meta")).json()).log;
     assert.deepEqual(log[0], { date: "2026-10-22", type: "skipped", id: "c-1", text: "Helle 2-Zimmer-Wohnung", template: "first-contact" });
+  } finally { await s.close(); }
+});
+
+// Replaces the atomic rename so a save waits on a gate and then fails; restore() puts the real one back.
+function failingSaves() {
+  const real = fs.promises.rename;
+  let open; const gate = new Promise(r => { open = r; }); let armed = true;
+  fs.promises.rename = async (a, b) => { if (armed) { await gate; throw new Error("EIO"); } return real(a, b); };
+  return { release: () => open(), restore: () => { armed = false; fs.promises.rename = real; } };
+}
+const tick = ms => new Promise(r => setTimeout(r, ms));
+
+test("a repeated claim runs the approval, version and eligibility checks again and releases the stale slot", async () => {
+  for (const [name, change, reason] of [
+    ["approval withdrawn", s => s.call("DELETE", "/api/templates/first-contact/de/approve"), "not-approved"],
+    ["template edited", s => s.call("PUT", "/api/templates/first-contact/de", { body: "Guten Tag, ganz neuer Text hier. {name}" }), "not-approved"],
+    ["listing dropped", s => s.call("PATCH", "/api/listings/flat-1", { status: "dropped" }), "already-contacted"],
+    ["portal switched to ImmoScout", s => s.addFlat("flat-1", { url: "https://www.immobilienscout24.de/expose/1" }), "portal-not-allowed"]
+  ]) {
+    const s = await outreachApp();
+    try {
+      await s.addFlat("flat-1"); await s.approve("first-contact");
+      const first = await (await s.claim({ listingId: "flat-1", templateId: "first-contact" })).json();
+      await change(s);
+      const r = await s.claim({ listingId: "flat-1", templateId: "first-contact" });
+      assert.equal(r.status, 409, name);
+      assert.equal((await r.json()).reason, reason, name);
+      const c = s.app.locals.state.outreach.claims.find(x => x.id === first.claim.id);
+      assert.equal(c.status, "released", name);
+      assert.equal(c.releaseReason, "stale", name);
+      assert.equal(c.text, undefined, name);
+      assert.equal(JSON.parse(fs.readFileSync(path.join(s.dir, "outreach.json"), "utf8")).claims[0].text, undefined, name);
+    } finally { await s.close(); }
+  }
+});
+
+test("a repeat with another language or portal is a mismatch; release removes the text from the file", async () => {
+  const s = await outreachApp();
+  try {
+    await s.addFlat("flat-1"); await s.approve("first-contact");
+    const { claim } = await (await s.claim({ listingId: "flat-1", templateId: "first-contact" })).json();
+    assert.deepEqual(await (await s.claim({ listingId: "flat-1", templateId: "first-contact", lang: "en" })).json(), { error: "claim-mismatch", reason: "claim-mismatch", claimId: claim.id });
+    assert.equal((await s.claim({ listingId: "flat-1", templateId: "first-contact", via: "email" })).status, 409);
+    const file = path.join(s.dir, "outreach.json");
+    assert.ok(JSON.parse(fs.readFileSync(file, "utf8")).claims[0].text, "a reserved claim keeps its text on disk");
+    await s.routine("POST", `/api/outreach/claims/${claim.id}/release`);
+    assert.equal(JSON.parse(fs.readFileSync(file, "utf8")).claims[0].text, undefined);
+  } finally { await s.close(); }
+});
+
+test("a repeat while the first save is pending is told to wait; when that save fails no slot exists", async () => {
+  const s = await outreachApp();
+  await s.addFlat("flat-1");
+  try {
+    await s.approve("first-contact");
+    const g = failingSaves();
+    try {
+      const p1 = s.claim({ listingId: "flat-1", templateId: "first-contact" });
+      await tick(80);
+      const r2 = await s.claim({ listingId: "flat-1", templateId: "first-contact" });
+      assert.equal(r2.status, 409);
+      assert.equal((await r2.json()).reason, "busy");
+      g.release();
+      assert.equal((await p1).status, 500);
+    } finally { g.restore(); }
+    assert.equal(s.app.locals.state.outreach.claims.length, 0);
+  } finally { await s.close(); }
+});
+
+test("a repeat finds the message already logged on the listing and finishes the sent step", async () => {
+  const s = await outreachApp();
+  try {
+    await s.addFlat("flat-1"); await s.approve("first-contact");
+    const { claim } = await (await s.claim({ listingId: "flat-1", templateId: "first-contact" })).json();
+    const file = path.join(s.dir, "outreach.json");
+    fs.rmSync(file); fs.mkdirSync(file);
+    assert.equal((await s.routine("POST", `/api/outreach/claims/${claim.id}/sent`)).status, 500);
+    fs.rmdirSync(file);
+    const r = await s.claim({ listingId: "flat-1", templateId: "first-contact" });
+    assert.equal(r.status, 409);
+    const j = await r.json();
+    assert.equal(j.reason, "already-sent");
+    assert.equal(j.text, undefined);
+    const c = s.app.locals.state.outreach.claims[0];
+    assert.equal(c.status, "sent");
+    assert.equal(c.text, undefined);
+    assert.equal(s.app.locals.state.listings["flat-1"].messages.length, 1);
+  } finally { await s.close(); }
+});
+
+test("a failed approval save never re-approves a version edited meanwhile", async () => {
+  const s = await outreachApp();
+  try {
+    await s.approve("first-contact");
+    s.advance(1);
+    const f = failingSaves();
+    let ra, re;
+    try {
+      const pa = s.call("POST", "/api/templates/first-contact/de/approve", { version: 1 });
+      await tick(80);
+      const pe = s.call("PUT", "/api/templates/first-contact/de", { body: "Guten Tag, ungeprüfter neuer Text. {name}" });
+      await tick(80);
+      f.release();
+      [ra, re] = await Promise.all([pa, pe]);
+    } finally { f.restore(); }
+    assert.equal(ra.status, 500);
+    const t = s.app.locals.state.outreach.templates["first-contact"].de;
+    assert.equal(t.approvedAt, null, "the unreviewed version 2 stays unapproved");
+    assert.ok(t.version === 2 || re.status === 500);
+  } finally { await s.close(); }
+});
+
+test("claims older than 24 hours are released as expired without their text", async () => {
+  const s = await outreachApp();
+  try {
+    await s.addFlat("flat-1"); await s.approve("first-contact");
+    const { claim } = await (await s.claim({ listingId: "flat-1", templateId: "first-contact" })).json();
+    s.advance(25 * 60);
+    await s.routine("GET", "/api/outreach/status");
+    const c = s.app.locals.state.outreach.claims.find(x => x.id === claim.id);
+    assert.equal(c.status, "released");
+    assert.equal(c.releaseReason, "expired");
+    assert.equal(c.text, undefined);
+    assert.equal((await s.claim({ listingId: "flat-1", templateId: "first-contact" })).status, 201);
+    assert.equal(JSON.parse(fs.readFileSync(path.join(s.dir, "outreach.json"), "utf8")).claims.find(x => x.id === claim.id).text, undefined);
+  } finally { await s.close(); }
+});
+
+test("a listing on an ImmoScout address is refused whatever its source says", async () => {
+  const s = await outreachApp();
+  try {
+    await s.approve("first-contact");
+    for (const [id, url] of [["s-1", "https://www.immobilienscout24.de/expose/1"], ["s-2", "https://immobilienscout24.de/expose/2"], ["s-3", "https://m.immobilienscout24.de/expose/3"]]) {
+      await s.addFlat(id, { url });
+      assert.equal((await (await s.claim({ listingId: id, templateId: "first-contact" })).json()).reason, "portal-not-allowed", url);
+    }
+    await s.addFlat("ok", { url: "https://www.immowelt.de/expose/immobilienscout24.de" });
+    assert.equal((await s.claim({ listingId: "ok", templateId: "first-contact" })).status, 201);
+  } finally { await s.close(); }
+});
+
+test("claim and release in a loop stops after three tries a day per listing", async () => {
+  const s = await outreachApp({ outreach: { dailyCap: 1, minGapMin: 60 } });
+  try {
+    await s.addFlat("flat-1"); await s.approve("first-contact");
+    for (let i = 0; i < 3; i++) {
+      const r = await s.claim({ listingId: "flat-1", templateId: "first-contact" });
+      assert.equal(r.status, 201, "try " + i);
+      await s.routine("POST", `/api/outreach/claims/${(await r.json()).claim.id}/release`);
+    }
+    const r = await s.claim({ listingId: "flat-1", templateId: "first-contact" });
+    assert.equal(r.status, 409);
+    assert.equal((await r.json()).reason, "retry-limit");
+    s.clock.t = new Date("2026-10-22T22:00:00Z").getTime();
+    assert.equal((await s.claim({ listingId: "flat-1", templateId: "first-contact" })).status, 201, "a new Berlin day");
+  } finally { await s.close(); }
+});
+
+test("saving the profile keeps the pause switch where the pause route left it", async () => {
+  const s = await outreachApp();
+  try {
+    const p = s.app.locals.state.profile;
+    await s.call("PUT", "/api/outreach/pause", { paused: true });
+    assert.equal((await s.call("PUT", "/api/profile", { ...p, outreach: { ...p.outreach, paused: false } })).status, 200);
+    assert.equal(s.app.locals.state.profile.outreach.paused, true);
+    assert.equal(JSON.parse(fs.readFileSync(path.join(s.dir, "profile.json"), "utf8")).outreach.paused, true);
+    await s.call("PUT", "/api/outreach/pause", { paused: false });
+    await s.call("PUT", "/api/profile", { ...p, outreach: { ...p.outreach, paused: true } });
+    assert.equal(s.app.locals.state.profile.outreach.paused, false);
   } finally { await s.close(); }
 });

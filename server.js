@@ -150,6 +150,8 @@ function createApp(options = {}) {
     const prev = state.profile, flagged = [];
     const placesChanged = JSON.stringify((prev && prev.places) || []) !== JSON.stringify(value.places);
     if (placesChanged) for (const c of Object.values(state.listings)) if (!c.commuteStale) { c.commuteStale = true; flagged.push(c); }
+    // The pause switch has its own route; a saved profile never flips it.
+    if (prev && prev.outreach && value.outreach) value.outreach.paused = prev.outreach.paused;
     state.profile = value;
     try {
       if (flagged.length) await persist();

@@ -54,3 +54,23 @@ test("noise badge tooltip has no leading separator when the source entry is miss
   assert.equal(ui.noiseBadgeTitle(undefined, 2022, y => `data ${y}`), "data 2022");
   assert.equal(ui.noiseBadgeTitle("Name", 2022, y => `data ${y}`), "Name · data 2022");
 });
+
+test("the uncovered-rail note and EBA link appear for Berlin figures with and without a band, never for NRW", () => {
+  for (const lang of ["en", "de", "pt"]) {
+    for (const f of [{ status: "ok", uncovered: ["rail"], max: null }, { status: "ok", uncovered: ["rail"], max: 70, band: "70–74" }]) {
+      const n = ui.noiseUncoveredNote(f, lang);
+      assert.equal(n.text, ui.L[lang].noiseUncovered);
+      assert.match(n.href, /^https:\/\//);
+      assert.equal(n.linkText, ui.L[lang].ebaLink);
+    }
+    assert.equal(ui.noiseUncoveredNote({ status: "ok", uncovered: [], max: 70 }, lang), null);
+    assert.equal(ui.noiseUncoveredNote({ status: "ok", max: null }, lang), null);
+  }
+});
+
+test("noiseBlock renders the note through the helper in both branches", () => {
+  const src = require("node:fs").readFileSync(require.resolve("../public/area-ui.js"), "utf8");
+  const body = src.slice(src.indexOf("function noiseBlock"), src.indexOf("// ---------- card badges"));
+  assert.match(body, /noiseUncoveredNote\(f, lang\)/);
+  assert.ok(body.indexOf("noiseUncoveredNote") > body.indexOf("T.noiseNone") && body.indexOf("noiseUncoveredNote") > body.indexOf("T.noiseMax"), "after both branches");
+});

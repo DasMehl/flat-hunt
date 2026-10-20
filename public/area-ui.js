@@ -173,10 +173,17 @@
     return out.join("\n");
   }
 
+  // Note for kinds the noise map does not contain (Berlin: federal railways) → { text, href, linkText } or null.
+  function noiseUncoveredNote(f, lang) {
+    if (!f || !Array.isArray(f.uncovered) || !f.uncovered.includes("rail")) return null;
+    const T = Lof(lang);
+    return /^https:\/\//.test(T.ebaUrl) ? { text: T.noiseUncovered, href: T.ebaUrl, linkText: T.ebaLink } : null;
+  }
+
   // Badge tooltip: "<source name> · <data year>"; just the year when the source entry is unknown.
   const noiseBadgeTitle = (name, year, dy) => (name ? name + " · " : "") + dy(year);
 
-  if (isNode) { module.exports = { L, ratingTip, bandOf, signed, noiseBadgeTitle }; return; }
+  if (isNode) { module.exports = { L, ratingTip, bandOf, signed, noiseBadgeTitle, noiseUncoveredNote }; return; }
 
   // ---------- DOM helpers ----------
   const el = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
@@ -262,6 +269,8 @@
       NOISE_KINDS.forEach(k => { const v = f.lden && f.lden[k]; if (typeof v === "number") ul.append(el("li", null, `${T.noiseKind[k]}: ${bandOf(v)} dB(A)`)); });
       if (ul.childElementCount) b.append(ul);
     }
+    const note = noiseUncoveredNote(f, lang);
+    if (note) { const u = el("p", "area-note", note.text + " "); u.append(link(note.href, note.linkText)); b.append(u); }
     b.append(sourceLine(lang, f));
   }
 

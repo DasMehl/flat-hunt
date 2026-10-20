@@ -118,7 +118,8 @@ function createApp(options = {}) {
 
   // PUT /api/profile and the pause switch share one write chain, so the file ends with the profile set last.
   let writingProfile = Promise.resolve();
-  const saveProfile = value => (writingProfile = writingProfile.catch(() => {}).then(() => writeJsonAtomic(files.profile, value)));
+  // Writes the profile as it is when its turn comes, so a queued older save never lands on top of a newer one.
+  const saveProfile = () => (writingProfile = writingProfile.catch(() => {}).then(() => writeJsonAtomic(files.profile, state.profile)));
 
   let writingOutreach = Promise.resolve();
   const persistOutreach = () => (writingOutreach = writingOutreach.catch(() => {}).then(() => writeJsonAtomic(files.outreach, state.outreach)));
@@ -182,9 +183,10 @@ function createApp(options = {}) {
     // The pause switch has its own route; a saved profile never flips it.
     if (prev && prev.outreach && value.outreach) value.outreach.paused = prev.outreach.paused;
     state.profile = value;
-    // Both writes are queued now, so a pause switched while the listings are saved is written after this profile.
+    // The listings are saved first: a profile on disk never points to places whose listings were not flagged.
     try {
-      await Promise.all([flagged.length ? persist() : null, saveProfile(value)]);
+      if (flagged.length) await persist();
+      await saveProfile();
       res.json({ ok: true, profile: value });
     } catch (e) {
       // Only while nothing newer (a pause, another save) replaced this profile.

@@ -409,3 +409,21 @@ test("a failed start-up write removes its temp file", () => {
   finally { fs.renameSync = real; }
   assert.deepEqual(fs.readdirSync(dir).filter(f => f.endsWith(".tmp")), []);
 });
+
+test("a profile save whose listings write fails leaves the old profile on disk", async () => {
+  const s = await outreachApp();
+  try {
+    await s.addFlat("flat-1");
+    const p = await (await s.call("GET", "/api/profile")).json();
+    const real = fs.promises.rename;
+    fs.promises.rename = async (a, b) => { if (String(b).endsWith("listings.json")) { fs.promises.rename = real; throw new Error("EIO"); } return real(a, b); };
+    p.name = "Changed Name";
+    p.places = [...(p.places || []), { label: "Gym", address: "Königsallee 1, Düsseldorf", lat: 51.22, lon: 6.78, maxMin: 30, mode: "car", time: "08:00" }].slice(0, 5);
+    const r = await s.call("PUT", "/api/profile", p);
+    fs.promises.rename = real;
+    assert.equal(r.status, 500);
+    const disk = JSON.parse(fs.readFileSync(path.join(s.dir, "profile.json"), "utf8"));
+    assert.notEqual(disk.name, "Changed Name");
+    assert.notEqual(s.app.locals.state.profile.name, "Changed Name");
+  } finally { await s.close(); }
+});

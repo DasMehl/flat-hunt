@@ -152,7 +152,7 @@
       places: [], radius: { center: null, km: null },
       redFlags: [],
       weights: { price: 2, size: 1.5, commute: 2, area: 1, condition: 1, contact: 1 },
-      outreach: { enabled: false, paused: false, language: "de" }
+      outreach: { enabled: false, paused: false, language: "de", minGapMin: 20, dailyCap: 10 }
     };
   }
   if (typeof window === "undefined") { module.exports = { defaultProfile }; return; }
@@ -376,7 +376,7 @@
         rule(() => [notBelow("roomsMax", "roomsMin", "roomsMax", "roomsMin"), notBelow("sizeMax", "sizeMin", "sizeMax", "sizeMin"), notBelow("floorMax", "floorMin", "floorMax", "floorMin"), notBelow("moveInTo", "moveInFrom", "moveInTo", "moveInFrom")])],
       [placesField(t, p), radiusField(t, p)],
       [redFlagsField(t, p, catalogue, lang), weightsField(t, p)],
-      [reveal(check(t, p, "outreach.enabled", "outreach"), [check(t, p, "outreach.paused", "paused"), select(t, p, "outreach.language", "outLang", ["de", "en", "pt"], t.lang)]), hint(t.outreachHint)]
+      [reveal(check(t, p, "outreach.enabled", "outreach"), [check(t, p, "outreach.paused", "paused"), select(t, p, "outreach.language", "outLang", ["de", "en"], t.lang)]), hint(t.outreachHint)]
     ];
   }
 

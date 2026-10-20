@@ -4,7 +4,7 @@ const express = require("express");
 const fs = require("fs");
 const path = require("path");
 const { readJson, writeJsonAtomic } = require("./lib/store");
-const { validateProfile } = require("./lib/profile");
+const { validateProfile, upgradeProfile } = require("./lib/profile");
 const { geocode } = require("./lib/geo");
 const { commuteFor } = require("./lib/commute");
 const { createCommuteJob } = require("./lib/commute-job");
@@ -49,7 +49,7 @@ function createApp(options = {}) {
   const state = {
     listings: readJson(files.listings, null),
     meta: readJson(files.meta, { lastCheck: null, log: [] }),
-    profile: readJson(files.profile, null),
+    profile: upgradeProfile(readJson(files.profile, null)),
     shares: (readJson(files.shares, { shares: [] }).shares) || []
   };
   if (!state.listings) {

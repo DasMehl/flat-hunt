@@ -103,10 +103,10 @@ Only templates with `approved[templateId][language]` true; `via` is the listing'
 This is the most important rule of the routine. A landlord who gets the same message twice does not answer. Re-read `GET /api/listings` right now (not the copy from step 1), then look for the evidence this template needs. Search this listing's messages, the inbox of the listing's portal and of the other two portals, and the owner's email (including portal notifications such as "Ihre Anfrage", "Nachricht zu Ihrer Anzeige", "Re: …").
 
 - **`first-contact`:** earlier contact about THIS flat is positive evidence: a thread or message that names this listing's id or URL, or both its address and its title. Any outgoing message on this listing in the tracker counts.
-- **`viewing-confirmation`, `documents-follow`, `decline`:** look only for a message sent AFTER the event that triggers the template that already does this template's job: confirms that time, announces the documents, or declines. The trigger times are: for `viewing-confirmation` the viewing's `decidedAt`; for `documents-follow` the date of the logged `documents-request` reply on the listing; for `decline` the date of the last message on the listing. An older message in the thread does not count.
+- **`viewing-confirmation`, `documents-follow`, `decline`:** look only for a message sent AFTER the event that triggers the template that already does this template's job: confirms that time, announces the documents, or declines. The trigger times are: for `viewing-confirmation` the landlord's invitation (the viewing's `createdAt`, or the invitation message), so any confirmation of that time sent after the invitation counts; for `documents-follow` the date of the logged `documents-request` reply on the listing; for `decline` there is no date limit: any earlier message that declines this flat counts, whatever its date. An older message in the thread does not count.
 
 Outcomes:
-- **The evidence is this claim's own text** (you sent it and `/sent` failed): `POST …/sent` for that claim. Do not release it and do not send.
+- **The evidence is this claim's own text** (you sent it and `/sent` failed): claim first. On `repeated: true`, `POST …/sent` for that claim; do not release it and do not send. If the claim answers 409 `already-contacted`, report it (with `expired: true` it is a claim that expired after the send: report "check manually").
 - **Positive evidence about this flat for this template's purpose** (a message that meets the test above): do not send. If you hold a claim, release it with `{"reason": "already-contacted"}`. If you hold none, claim and release at once with `already-contacted` (this closes the slot for good without counting against the cap or the gap); when the claim is refused, skip the listing. Name the conversation in the report without quoting it.
 - **The same landlord but a different flat, or anything ambiguous** (a thread you cannot match, a similar title, a landlord with several flats): do NOT claim at all. Skip the listing and report it to the owner as "check manually".
 - **Nothing found:** go on.
@@ -120,7 +120,7 @@ Run the duplicate check (5.2) first. Then `POST /api/outreach/claims`. A claim t
 - 201: go to 5.4 with `claim.id` and `text`. Claims are unreported-send slots: one that gets no answer within 24 hours expires and then blocks that template for that listing for good (see 5.5).
 - 200 `repeated: true`: an earlier claim exists that was never reported (a send may have happened and `/sent` failed). Before anything else look for THIS claim's own text, exactly `text`, in the tracker's outgoing messages for this listing, the portal's sent messages and the owner's sent mail.
   - Found: `POST …/sent` for that claim. Never release it, never send. Stop for this listing.
-  - Not found: send (go to 5.4) only when this run's own earlier claim request for this listing and template got no answer (timeout or 5xx) and this is its retry. Any other `repeated: true` whose text is not found: never send. Leave the claim, and report "check manually" to the owner. A missing copy is never a reason to send again.
+  - Not found: send (go to 5.4) only when this is the in-run retry of this run's own earlier claim request for this listing and template that got no answer (timeout or 5xx) AND `claim.claimedAt` is no earlier than that run's first claim request for it. Any other `repeated: true` whose text is not found: never send. Leave the claim, and report "check manually" to the owner. A missing copy is never a reason to send again.
 - 409 `paused` or `disabled`: stop all sending (rule 4).
 - 409 `too-soon` with `retryAt`: if it is at most 30 minutes away, wait until then and claim again; otherwise stop sending for this run.
 - 409 `daily-cap`: stop sending for this run.
@@ -128,7 +128,8 @@ Run the duplicate check (5.2) first. Then `POST /api/outreach/claims`. A claim t
 - 409 `retry-limit`: this listing and template already had three claims today (Berlin day). Skip until tomorrow.
 - 409 `claim-mismatch`: a claim for this listing and template exists with a different language or `via`. Skip the listing and let that claim expire; do not guess the original `via`.
 - 409 `already-sent`: treat as done. Never send again.
-- 409 `already-contacted` (also what an expired claim answers), `not-shortlisted`, `criteria`, `no-confirmed-viewing`, `no-doc-request`, `not-dropped`, `gone`, `portal-not-allowed`, `too-many-messages`: skip this listing.
+- 409 `already-contacted` with `expired: true`: an earlier claim for this slot was never reported and expired after 24 hours; a send may have happened. Skip and report "check manually".
+- 409 `already-contacted` (without `expired`), `not-shortlisted`, `criteria`, `no-confirmed-viewing`, `no-doc-request`, `not-dropped`, `gone`, `portal-not-allowed`, `too-many-messages`: skip this listing.
 - 409 `not-approved`: the template has no approval in this language or was edited since the claim. Skip this listing. When it answers a repeat claim, the server released the old claim: the old text is void, never send it. A later run may claim again with the new version.
 - 409 `missing-values` with `missing`: skip; report which applicant or profile values the owner should fill in.
 - 400, 404: the request is wrong or the listing is unknown; do not guess, skip and report.

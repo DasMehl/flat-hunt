@@ -55,6 +55,10 @@ test("viewing request errors: held claim, dead connection, server error, bare st
 test("update log parts for sent, skipped and reply entries", () => {
   assert.deepEqual(ui.updateParts({ type: "sent", template: "first-contact" }, "de"), { label: ui.L.de.upSent, note: ui.L.de.names["first-contact"] });
   assert.deepEqual(ui.updateParts({ type: "skipped", template: "decline" }, "en"), { label: ui.L.en.upSkipped, note: ui.L.en.names.decline });
+  for (const [lang, text] of [["en", "Expired, maybe sent: check"], ["de", "Abgelaufen, evtl. gesendet: prüfen"], ["pt", "Expirado, talvez enviado: verificar"]]) {
+    assert.equal(ui.updateParts({ type: "skipped", reason: "expired", template: "decline" }, lang).label, text);
+    assert.notEqual(ui.updateParts({ type: "skipped", template: "decline" }, lang).label, text);
+  }
   assert.deepEqual(ui.updateParts({ type: "reply", intent: "viewing-invite" }, "en"), { label: "Reply", note: "Viewing invitation" });
   assert.equal(ui.updateParts({ type: "price" }, "en"), null);
 });

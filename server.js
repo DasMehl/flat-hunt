@@ -62,8 +62,11 @@ function createApp(options = {}) {
   const loadedClaims = state.outreach.claims, expiredClaims = [], prunedClaims = pruneClaims(loadedClaims, now(), new Set(), expiredClaims);
   const claimsChanged = prunedClaims.length !== loadedClaims.length || prunedClaims.some((c, i) => c !== loadedClaims[i]);
   state.outreach.claims = prunedClaims;
-  if (expiredClaims.length) { state.meta.log = [...expiredLog(expiredClaims, state.listings || {}, now()), ...(state.meta.log || [])].slice(0, 200); fs.writeFileSync(files.meta, JSON.stringify(state.meta)); }
-  if (!fs.existsSync(files.outreach) || claimsChanged) fs.writeFileSync(files.outreach, JSON.stringify(state.outreach));
+  // Written through a temp file and a rename, outreach.json first: a crash between the two writes can lose the update-log
+  // line, but never writes it twice (the claim is already closed on the next start).
+  const writeFileAtomicSync = (file, data) => { const tmp = file + ".tmp"; fs.writeFileSync(tmp, data); fs.renameSync(tmp, file); };
+  if (!fs.existsSync(files.outreach) || claimsChanged) writeFileAtomicSync(files.outreach, JSON.stringify(state.outreach));
+  if (expiredClaims.length) { state.meta.log = [...expiredLog(expiredClaims, state.listings || {}, now()), ...(state.meta.log || [])].slice(0, 200); writeFileAtomicSync(files.meta, JSON.stringify(state.meta)); }
   if (!state.listings) {
     state.listings = {};
     if (process.env.SEED === "1") {
@@ -417,12 +420,14 @@ function createApp(options = {}) {
         c.gone = true; c.goneAt = d; changes.push({ date: d, type: "gone", id, text: c.title });
       }
     }
-    state.meta.lastCheck = req.body.checkedAt || new Date().toISOString();
+    const checkedAt = state.meta.lastCheck = req.body.checkedAt || new Date().toISOString();
     state.meta.log = [...changes, ...state.meta.log].slice(0, 200);
-    const log = state.meta.log;
     try { await persist(); } catch (e) {
       for (const [id, [c, snap]] of snaps) if (state.listings[id] === c) state.listings[id] = snap;
-      if (state.meta.log === log) { state.meta.lastCheck = prevCheck; state.meta.log = prevLog; }
+      // Only this sync's own changes: log lines that others added meanwhile (an expired claim, a reply) stay.
+      if (state.meta.lastCheck === checkedAt) state.meta.lastCheck = prevCheck;
+      const kept = state.meta.log.filter(e => !changes.includes(e));
+      state.meta.log = [...kept, ...prevLog.filter(e => !kept.includes(e))];
       return res.status(500).json({ error: "save failed" });
     }
     res.json({ ok: true, changes });

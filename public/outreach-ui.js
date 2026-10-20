@@ -30,7 +30,7 @@
       declined: "Declined. Nothing was sent; answer the landlord yourself if you like.", cancelled: "Cancelled: the landlord withdrew.",
       me: "Me (routine)", templateTag: (name, v, lang) => `Template: ${name}${v == null ? "" : ` · v${v}`} · ${lang.toUpperCase()}`,
       intents: { "viewing-invite": "Viewing invitation", "documents-request": "Documents request", rejection: "Rejection", question: "Question", other: "Other" },
-      upSent: "Message sent", upReply: "Reply", upSkipped: "Skipped (already in contact)", viewingBadge: "Viewing to confirm",
+      upSent: "Message sent", upReply: "Reply", upSkipped: "Skipped (already in contact)", upExpired: "Expired, maybe sent: check", viewingBadge: "Viewing to confirm",
       claimOpen: "The confirmation is being sent right now. Try again in a minute."
     },
     de: {
@@ -57,7 +57,7 @@
       declined: "Abgelehnt. Es wurde nichts gesendet; antworte dem Vermieter bei Bedarf selbst.", cancelled: "Abgesagt: Der Vermieter hat zurückgezogen.",
       me: "Ich (Routine)", templateTag: (name, v, lang) => `Vorlage: ${name}${v == null ? "" : ` · V${v}`} · ${lang.toUpperCase()}`,
       intents: { "viewing-invite": "Besichtigungseinladung", "documents-request": "Unterlagenanfrage", rejection: "Absage", question: "Frage", other: "Sonstiges" },
-      upSent: "Nachricht gesendet", upReply: "Antwort", upSkipped: "Übersprungen (schon in Kontakt)", viewingBadge: "Termin bestätigen",
+      upSent: "Nachricht gesendet", upReply: "Antwort", upSkipped: "Übersprungen (schon in Kontakt)", upExpired: "Abgelaufen, evtl. gesendet: prüfen", viewingBadge: "Termin bestätigen",
       claimOpen: "Die Bestätigung wird gerade gesendet. Versuche es in einer Minute noch einmal."
     },
     pt: {
@@ -84,7 +84,7 @@
       declined: "Recusado. Nada foi enviado; responda ao proprietário se quiser.", cancelled: "Cancelado: o proprietário desistiu.",
       me: "Eu (rotina)", templateTag: (name, v, lang) => `Modelo: ${name}${v == null ? "" : ` · v${v}`} · ${lang.toUpperCase()}`,
       intents: { "viewing-invite": "Convite para visita", "documents-request": "Pedido de documentos", rejection: "Recusa", question: "Pergunta", other: "Outro" },
-      upSent: "Mensagem enviada", upReply: "Resposta", upSkipped: "Ignorado (já em contato)", viewingBadge: "Confirmar visita",
+      upSent: "Mensagem enviada", upReply: "Resposta", upSkipped: "Ignorado (já em contato)", upExpired: "Expirado, talvez enviado: verificar", viewingBadge: "Confirmar visita",
       claimOpen: "A confirmação está sendo enviada agora. Tente novamente em um minuto."
     }
   };
@@ -138,7 +138,7 @@
   function updateParts(e, lang) {
     const t = L[lang] || L.en;
     if (e.type === "sent") return { label: t.upSent, note: t.names[e.template] || "" };
-    if (e.type === "skipped") return { label: t.upSkipped, note: t.names[e.template] || "" };
+    if (e.type === "skipped") return { label: e.reason === "expired" ? t.upExpired : t.upSkipped, note: t.names[e.template] || "" };
     if (e.type === "reply") return { label: t.upReply, note: t.intents[e.intent] || "" };
     return null;
   }

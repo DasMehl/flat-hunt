@@ -148,3 +148,156 @@ test("a reply body over 64 KB is refused with 413", async () => {
     assert.equal((await s.routine("POST", "/api/listings/flat-1/replies", reply({ text: "x".repeat(70000) }))).status, 413);
   } finally { await s.close(); }
 });
+
+// ---------- fix round 1 ----------
+const fs = require("node:fs"), path = require("node:path");
+const wait = ms => new Promise(r => setTimeout(r, ms));
+// Holds the next write of listings.json until released, then makes it fail.
+function gateNextListingsWrite() {
+  const real = fs.promises.rename;
+  let release; const p = new Promise(r => { release = r; });
+  fs.promises.rename = async (a, b) => {
+    if (String(b).endsWith("listings.json")) { fs.promises.rename = real; await p; throw new Error("EIO simulated"); }
+    return real.call(fs.promises, a, b);
+  };
+  return { release, restore: () => { fs.promises.rename = real; } };
+}
+const onDisk = s => JSON.parse(fs.readFileSync(path.join(s.dir, "listings.json"), "utf8"))["flat-1"];
+
+test("race: a failed reply save keeps what /sent recorded meanwhile", async () => {
+  const s = await outreachApp();
+  let g = null;
+  try {
+    await s.addFlat("flat-1");
+    await s.approve("first-contact");
+    const { claim } = await (await s.claim({ listingId: "flat-1", templateId: "first-contact" })).json();
+    g = gateNextListingsWrite();
+    const pReply = s.routine("POST", "/api/listings/flat-1/replies", { via: "email", text: "Haben Sie Haustiere?", intent: "question" });
+    await wait(80);
+    const pSent = s.routine("POST", `/api/outreach/claims/${claim.id}/sent`);
+    await wait(80);
+    g.release();
+    const [a, b] = await Promise.all([pReply, pSent]);
+    assert.equal(a.status, 500);
+    assert.equal(b.status, 200);
+    const l = s.app.locals.state.listings["flat-1"];
+    assert.deepEqual(l.messages.map(m => m.dir), ["out"]);
+    assert.equal(l.status, "contacted");
+    assert.deepEqual(onDisk(s).messages.map(m => m.dir), ["out"]);
+    assert.equal(onDisk(s).status, "contacted");
+  } finally { if (g) g.restore(); await s.close(); }
+});
+
+test("race: a failed confirm save keeps a documents-request reply logged meanwhile", async () => {
+  const s = await outreachApp();
+  try {
+    await s.addFlat("flat-1");
+    const { viewingId } = await (await s.routine("POST", "/api/listings/flat-1/replies", reply())).json();
+    const g = gateNextListingsWrite();
+    const pConf = s.call("POST", `/api/listings/flat-1/viewings/${viewingId}/confirm`, { time: "2026-10-27T17:00:00Z" });
+    await wait(80);
+    const pRep = s.routine("POST", "/api/listings/flat-1/replies", { via: "email", text: "Bitte Unterlagen schicken.", intent: "documents-request" });
+    await wait(80);
+    g.release();
+    const [a, b] = await Promise.all([pConf, pRep]);
+    assert.equal(a.status, 500);
+    assert.equal(b.status, 201);
+    const l = s.app.locals.state.listings["flat-1"];
+    assert.equal(l.viewings[0].status, "pending");
+    assert.equal(l.status, "docs-requested");
+    assert.equal(l.docRequests.length, 1);
+    const d = onDisk(s);
+    assert.deepEqual(d.messages.map(m => m.intent), ["viewing-invite", "documents-request"]);
+    assert.equal(d.docRequests.length, 1);
+    assert.equal(d.viewings[0].status, "pending");
+  } finally { await s.close(); }
+});
+
+test("a reply without date or externalId that is posted again is a repeat", async () => {
+  const s = await outreachApp();
+  try {
+    await s.addFlat("flat-1");
+    const inv = { via: "immowelt", from: "Example GmbH", text: "Dienstag 18 Uhr?", intent: "viewing-invite", proposedTimes: ["2026-10-27T18:00:00+01:00"] };
+    assert.equal((await s.routine("POST", "/api/listings/flat-1/replies", inv)).status, 201);
+    s.advance(1);
+    const again = await s.routine("POST", "/api/listings/flat-1/replies", inv);
+    assert.equal(again.status, 200);
+    assert.deepEqual(await again.json(), { ok: true, repeated: true });
+    assert.equal(s.app.locals.state.listings["flat-1"].viewings.length, 1);
+  } finally { await s.close(); }
+});
+
+test("the 200-message limit answers 409; replies share the routine rate limit", async () => {
+  const s = await outreachApp({ options: { routineRateLimit: { limit: 3 } } });
+  try {
+    await s.addFlat("flat-1");
+    const l = s.app.locals.state.listings["flat-1"];
+    l.messages = Array.from({ length: 200 }, (_, i) => ({ date: "2026-10-01T00:00:00.000Z", dir: "in", from: "", via: "email", text: "m" + i }));
+    const r = await s.routine("POST", "/api/listings/flat-1/replies", reply());
+    assert.equal(r.status, 409);
+    assert.equal((await r.json()).reason, "too-many-messages");
+    assert.equal(l.messages.length, 200);
+    const codes = [];
+    for (let i = 0; i < 4; i++) codes.push((await s.routine("POST", "/api/listings/flat-1/replies", reply())).status);
+    assert.ok(codes.includes(429), codes.join());
+  } finally { await s.close(); }
+});
+
+test("a rejection also cancels a confirmed viewing whose confirmation was sent", async () => {
+  const s = await outreachApp();
+  try {
+    await s.addFlat("flat-1");
+    await s.approve("viewing-confirmation");
+    const { viewingId } = await (await s.routine("POST", "/api/listings/flat-1/replies", reply())).json();
+    await s.call("POST", `/api/listings/flat-1/viewings/${viewingId}/confirm`, { time: "2026-10-27T17:00:00.000Z" });
+    const { claim } = await (await s.claim({ listingId: "flat-1", templateId: "viewing-confirmation", viewingId })).json();
+    await s.routine("POST", `/api/outreach/claims/${claim.id}/sent`);
+    await s.routine("POST", "/api/listings/flat-1/replies", { via: "email", text: "Leider vergeben.", intent: "rejection" });
+    assert.equal(s.app.locals.state.listings["flat-1"].viewings[0].status, "cancelled");
+  } finally { await s.close(); }
+});
+
+test("decline and a changed confirm answer 409 claim-open while a confirmation claim is open", async () => {
+  const s = await outreachApp();
+  try {
+    await s.addFlat("flat-1");
+    await s.approve("viewing-confirmation");
+    const { viewingId } = await (await s.routine("POST", "/api/listings/flat-1/replies", reply())).json();
+    await s.call("POST", `/api/listings/flat-1/viewings/${viewingId}/confirm`, { time: "2026-10-27T17:00:00.000Z" });
+    assert.equal((await s.claim({ listingId: "flat-1", templateId: "viewing-confirmation", viewingId })).status, 201);
+    const d = await s.call("POST", `/api/listings/flat-1/viewings/${viewingId}/decline`);
+    assert.equal(d.status, 409);
+    assert.equal((await d.json()).reason, "claim-open");
+    const c = await s.call("POST", `/api/listings/flat-1/viewings/${viewingId}/confirm`, { time: "2026-10-28T16:30:00.000Z" });
+    assert.equal(c.status, 409);
+    assert.equal((await c.json()).reason, "claim-open");
+  } finally { await s.close(); }
+});
+
+test("confirming the same time again is idempotent; decline twice and no proposed times are refused", async () => {
+  const s = await outreachApp();
+  try {
+    await s.addFlat("flat-1");
+    const { viewingId } = await (await s.routine("POST", "/api/listings/flat-1/replies", reply())).json();
+    const url = `/api/listings/flat-1/viewings/${viewingId}`;
+    assert.equal((await s.call("POST", url + "/confirm", { time: "2026-10-27T17:00:00.000Z" })).status, 200);
+    assert.equal((await s.call("POST", url + "/confirm", { time: "2026-10-27T17:00:00.000Z" })).status, 200);
+    assert.equal((await s.call("POST", url + "/confirm", { time: "2026-10-28T16:30:00.000Z" })).status, 409);
+    const inv = await (await s.routine("POST", "/api/listings/flat-1/replies", { via: "email", text: "Besichtigung möglich, wir melden uns.", intent: "viewing-invite" })).json();
+    const u2 = `/api/listings/flat-1/viewings/${inv.viewingId}`;
+    assert.equal((await s.call("POST", u2 + "/confirm", { time: "2026-10-27T17:00:00.000Z" })).status, 400);
+    assert.equal((await s.call("POST", u2 + "/decline")).status, 200);
+    assert.equal((await s.call("POST", u2 + "/decline")).status, 409);
+  } finally { await s.close(); }
+});
+
+test("impossible dates, a date over a year back and a multi-line from are refused", () => {
+  const { isoTime } = require("../lib/replies");
+  assert.equal(isoTime("2026-02-30T10:00:00Z"), null);
+  assert.equal(isoTime("2026-10-27T24:00:00Z"), null);
+  assert.equal(isoTime("2026-10-27T10:60:00Z"), null);
+  assert.equal(isoTime("2026-10-27T10:00:00+25:00"), null);
+  assert.equal(isoTime("2026-10-27T18:00:00+01:00"), "2026-10-27T17:00:00.000Z");
+  const bad = [[{ date: "2025-10-01T10:00:00Z" }, /^date:/], [{ from: "A\nB" }, /^from:/], [{ from: "A\tB" }, /^from:/], [{ date: "2026-02-30T10:00:00Z" }, /^date:/]];
+  for (const [patch, re] of bad) assert.ok(validateReply(reply(patch), NOW).errors.some(e => re.test(e)), JSON.stringify(patch));
+});

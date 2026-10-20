@@ -267,10 +267,11 @@ function createApp(options = {}) {
     if (["nextStep", "notes"].some(k => k in p && (typeof p[k] !== "string" || p[k].length > 10000))) return res.status(400).json({ error: "invalid text" });
     if ("pick" in p && typeof p.pick !== "boolean") return res.status(400).json({ error: "invalid pick" });
     if ("messages" in p && (!Array.isArray(p.messages) || p.messages.length > 200 || p.messages.some(m => !m || typeof m !== "object" || typeof m.text !== "string" || m.text.length > 10000))) return res.status(400).json({ error: "invalid messages" });
-    const prev = structuredClone(c);
-    for (const k of allowed) if (k in p) c[k] = p[k];
+    const changed = allowed.filter(k => k in p).map(k => [k, Object.hasOwn(c, k), c[k]]);
+    for (const [k] of changed) c[k] = p[k];
     try { await persist(); } catch (e) {
-      if (state.listings[req.params.id] === c) state.listings[req.params.id] = prev;
+      // Restore only the fields this request changed, and only while they still hold what it wrote.
+      for (const [k, had, old] of changed) if (c[k] === p[k]) { if (had) c[k] = old; else delete c[k]; }
       return res.status(500).json({ error: "save failed" });
     }
     res.json({ ok: true, listing: c });

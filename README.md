@@ -105,9 +105,9 @@ The texts shown on the page live in `public/area-sources.js`.
 
 **Coverage limits**
 
-- Noise: only NRW and Berlin. Elsewhere the panel says "no data". A point with no mapped source is not necessarily quiet: only major roads, rail, airports and industry are mapped.
+- Noise: only NRW and Berlin. Elsewhere the panel says "no data". A point with no mapped source is not necessarily quiet: only major roads, airports, industry and (NRW) railways and trams are mapped. Berlin's map has no federal railways (S-Bahn, DB; the Eisenbahn-Bundesamt maps those); the panel says so and links to the EBA noise map.
 - Flood: the BfG does not guarantee completeness. River and coastal floods only, no heavy rain.
-- Crime: per Kreis or district-free city, counted where crimes happen. The Kreisart in the data: `KfS` district-free city, `SK` Stadtkreis (Baden-Württemberg), `LK` Landkreis, `K` Kreis (Schleswig-Holstein), `RV` Regionalverband (Saarbrücken).
+- Crime: per Kreis or district-free city, counted where crimes happen. The Kreisart in the data: `KfS` district-free city, `SK` Stadtkreis (Baden-Württemberg), `LK` Landkreis, `K` Kreis (Schleswig-Holstein, NRW), `RV` Regionalverband (Saarbrücken).
 - Census rent: existing tenancies on 15.05.2022. Cells with too few rented flats are empty.
 - OpenStreetMap completeness varies, doctors and kindergartens especially in rural areas.
 

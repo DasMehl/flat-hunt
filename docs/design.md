@@ -97,7 +97,7 @@ Built-in catalogue (`public/redflags.json`, en/de/pt label and reason, a text pa
 
 ## Area analysis (phase 3)
 
-Sources confirmed by the data spike of 19.10.2026 and re-checked live by `scripts/area-smoke.js`. A source that fails is dropped, never faked. Each figure in the listing's "Area" panel shows its source, area level, data year and retrieval date; a page footer credits every source.
+Sources confirmed by the data spike of 19.10.2026 and re-checked live by `scripts/area-smoke.js`. A source that fails is dropped, never faked. Each figure in the listing's "Area" panel shows its source, area level, data year and retrieval date; a page footer credits every source. Every source has a dataset link (`url`) and a licence link (`licenceUrl`) in `public/area-sources.js`.
 
 | Figure | Source | Area level | Coverage |
 |---|---|---|---|
@@ -110,19 +110,19 @@ Sources confirmed by the data spike of 19.10.2026 and re-checked live by `script
 
 ### Implementation
 
-- `lib/area-http.js`: shared request helper. Flat Hunt User-Agent, timeout, response capped at 5 MB, redirects not followed, retry with back-off on 429/5xx/network errors, and a spacer that serialises calls with a minimum gap.
+- `lib/area-http.js`: shared request helper. Flat Hunt User-Agent, timeout, response capped (5 MB by default; 8 MB for Overpass, 1 MB for the foot router), redirects not followed, retry with back-off on 429/502/503/504, timeouts and network errors, and a spacer that serialises calls with a minimum gap.
 - `lib/coords.js` rejects points outside Germany's bounding box before any request. `lib/kreis.js` asks the BKG VG250 WFS for the Kreis (AGS) of the point.
-- `lib/crime.js`: looks the AGS up in the PKS table; `kind` is the Kreisart as published (`RV` Regionalverband, `LK` Landkreis, `KfS` kreisfreie Stadt, `K` Kreis, `SK` Stadtkreis (Baden-Württemberg)). The national rate is the sum of all Kreise's cases over their residents.
+- `lib/crime.js`: looks the AGS up in the PKS table; `kind` is the Kreisart as published (`RV` Regionalverband, `LK` Landkreis, `KfS` kreisfreie Stadt, `K` Kreis (Schleswig-Holstein, NRW), `SK` Stadtkreis (Baden-Württemberg)). The national rate is the sum of all Kreise's cases over their residents.
 - `lib/flood.js`: zones `high | medium | low | unknown`; an empty answer is `no-data`.
-- `lib/noise.js`: adapters for NRW (Esri WMS, `text/xml`) and Berlin (GeoServer, JSON), one layer per source, one at a time. An answer that is not recognised is an error, never "quiet". Berlin's lowest class "bis 55 dB(A)" is a readable answer below the threshold. Other states give `no-data`.
+- `lib/noise.js`: adapters for NRW (Esri WMS, `text/xml`) and Berlin (GeoServer, JSON), one layer per source, one at a time. An answer that is not recognised is an error, never "quiet". Berlin's lowest class "bis 55 dB(A)" is a readable answer below the threshold. Berlin has no federal railways (S-Bahn, DB: the Eisenbahn-Bundesamt maps them), so its adapter lists `uncovered: ["rail"]`, carried into the figure; the panel then says so, links to the EBA noise map and does not claim railways are mapped. Other states give `no-data`.
 - `lib/rent-grid.js`: dense 1 km grid in EPSG:3035, euro cents per m²; 0 means no value. The figure is existing tenancies on 15.05.2022, not market rent.
 - `lib/amenities.js`: Overpass, one query at a time and at least 10 s apart; retries after 30, 60 and 120 s on overload; `OVERPASS_URL` replaces the public endpoint. Results cached 30 days per ~100 m (`lib/area-cache.js`), the nearest 10 per category; distances are re-measured from the listing's exact point. The nearest three per category are routed on foot.
-- `lib/area.js` assembles the figures; `lib/area-job.js` is the background queue (one listing at a time) and `lib/area-api.js` the routes, including recompute. Computed after a listing is added, after its address or the routine's coordinates change, at start-up for listings without facts, and on "Recompute". Never inside a request. Only the server writes `area`.
+- `lib/area.js` assembles the figures; `lib/area-job.js` is the background queue (one listing at a time, 1.5 s apart so the free map services are not hit back to back) and `lib/area-api.js` the routes, including recompute. Computed after a listing is added, after its address or the routine's coordinates change, at start-up for listings without facts, and on "Recompute". Never inside a request. Only the server writes `area`.
 
 ### Data model and wording
 
 - Cached on the listing as `area`: `lat`, `lon`, `computedAt`, and per figure `status` ok | no-data | error, `source`, `level`, `fetchedAt`.
-- "No data" is never shown as "no risk": an empty flood answer means no mapped flood area was found and coverage is not guaranteed; no mapped noise source means none above the mapping threshold, not quiet.
+- "No data" is never shown as "no risk": an empty flood answer means no mapped flood area was found and coverage is not guaranteed; no mapped noise source means none above the mapping threshold, not quiet. Cached amenities show the cache entry's time as retrieval date.
 - Crime is always labelled as an area average counted where crimes happen, never coloured as good or bad, never on the card and never a per-street score. Berlin's district-level atlas (CC BY-SA) is not used in phase 3.
 - The `area` rating key gets an estimate: 10 × the mean walking points over six groups (transit, supermarket, pharmacy, doctor, kindergarten or school, park or playground; ≤ 5 min 1, ≤ 10 0.75, ≤ 15 0.5, ≤ 20 0.25), minus flood (HQhäufig 3, HQ100 2, HQextrem 0.5, unknown class 0.5), noise (≥ 70 dB 2, ≥ 65 1.5, ≥ 60 1, ≥ 55 0.5) and crime (≥ 1.5 × national 1, ≥ 1.2 × 0.5), rounded and clamped to 0–10; the tooltip shows the formula and the listing's numbers. Figures with no data or an error deduct nothing.
 - The static files are produced by `scripts/area-data.js` from the official downloads and carry source, licence, attribution and generation date.

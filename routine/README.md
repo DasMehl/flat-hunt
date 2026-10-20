@@ -20,25 +20,16 @@ The site stores and shows flats. Finding new listings, logging landlord replies 
 
 ## Install
 
-1. Install Claude Code and the desktop app.
-2. Set `SYNC_KEY` on your server (a long random value, for example `openssl rand -base64 32`). Save it in a file only you can read. The routine gets only this key, never the site password:
+1. Install the [Claude desktop app](https://claude.ai/download) and the Claude in Chrome extension. In Chrome, log in to Immowelt, Kleinanzeigen, WG-Gesucht and your email.
+2. Set `SYNC_KEY` on your server (a long random value, for example `openssl rand -hex 24`). The routine gets only this key, never the site password.
+3. On each portal, run the searches you want, logged in (location, radius, rent or price, rooms, size), and copy the result-page URLs. Narrow each search to three result pages or fewer: the routine reads at most three pages per search, and with more it cannot tell which listings disappeared.
+4. In a clone of the repository, run `./scripts/install-routine.sh`. It asks for your site address, the sync key and the search URLs, checks that the site accepts the key, and writes:
+   - `~/.flat-hunt/sync-key` (readable only by you),
+   - `~/.flat-hunt/searches.txt` (one URL per line; edit it any time),
+   - `~/.flat-hunt/routine-prompt.md`, which is `routine/SKILL.md` with your site address filled in (on a Mac it is also copied to the clipboard).
+5. In the Claude desktop app, create a scheduled task, for example every 3 hours during the day, and paste the routine prompt as its instructions.
 
-   ```bash
-   mkdir -p ~/.flat-hunt && chmod 700 ~/.flat-hunt
-   printf '%s' 'YOUR-SYNC-KEY' > ~/.flat-hunt/sync-key
-   chmod 600 ~/.flat-hunt/sync-key
-   ```
-
-3. Create your searches yourself, logged in, on each portal (location, radius, rent or price, rooms, size), and save their result URLs, one per line:
-
-   ```bash
-   printf '%s\n' 'https://www.immowelt.de/…' 'https://www.kleinanzeigen.de/…' 'https://www.wg-gesucht.de/…' > ~/.flat-hunt/searches.txt
-   ```
-
-4. Copy `routine/SKILL.md` to `~/.claude/scheduled-tasks/flat-hunt-listing-check/SKILL.md` and replace `https://YOUR-SITE.up.railway.app` with your site's address.
-5. Keep each saved search to three result pages or fewer (narrow the filters). The routine reads at most three pages per search; if a search has more, it cannot tell which listings disappeared and never marks any as gone.
-6. In the Claude desktop app, create a scheduled task from it, for example every 3 hours during the day.
-7. The routine only runs while the computer is awake, and its browser must be logged in to the portals and your email and connected to Claude. Pausing in the page header only stops sending; to stop the routine completely, disable the scheduled task in the Claude desktop app.
+The routine only runs while the computer is awake and Chrome is connected to Claude. Pausing in the page header only stops sending; to stop the routine completely, disable the scheduled task in the Claude desktop app.
 
 ## Sending messages
 

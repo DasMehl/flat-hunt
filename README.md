@@ -1,26 +1,80 @@
 # Flat Hunt
 
-A private tracker for finding a flat to rent or buy, run by each person on their own server. You describe your household and income, what you want and where you need to get to every day. The site ranks listings by your priorities, checks commute times and keeps your conversations with landlords. It also keeps your application documents encrypted and shares them only after you approve, through an expiring, watermarked link. It also shows sourced facts about each listing's surroundings: everyday places, flood zones, noise, recorded crime and census rent.
+Your own private flat-search tracker, for renting or buying in Germany. You tell it your budget, what you need and where you have to get to every day. It ranks every flat you add by your priorities, works out commute times and affordability, checks the area (everyday places, flood zones, noise, crime, census rent) and keeps your conversations with landlords in one place. Your application documents stay encrypted and only leave through a link you create, which expires and watermarks every page.
 
-An optional Claude Code routine finds new listings in your own browser, logs landlord replies and sends only the message templates you approved, at a pace you set. A pause switch stops new sends at once; a message already being sent can still go out.
+Optionally, a Claude routine on your computer searches Immowelt, Kleinanzeigen and WG-Gesucht for you, logs landlord replies and, only if you allow it, sends message templates you approved.
 
-## Status
+Every person runs their own copy. There are no accounts: one site, one password, one owner.
 
-Phases 1 to 4 are built: core tracker, applicant profile and document vault, area analysis, and the routine with automatic answers. The full design is in [docs/design.md](docs/design.md). It builds on [Car Hunt](https://github.com/DasMehl/car-hunt).
+## Get started (about 10 minutes)
 
-## What it does in phase 1
+You need a [GitHub](https://github.com) account and a [Railway](https://railway.com) account. Any other host that runs Node.js 18+ with a persistent disk works too.
+
+1. **Fork** this repository on GitHub (button at the top right).
+2. **Create three secrets** in a terminal and save them in your password manager:
+
+   ```sh
+   echo "SITE_PASSWORD=$(openssl rand -base64 18)"
+   echo "SYNC_KEY=$(openssl rand -hex 24)"
+   echo "VAULT_KEY=$(openssl rand -base64 32)"
+   ```
+
+   Keep `VAULT_KEY` safe: without it your stored documents cannot be decrypted, not even by you.
+3. **Deploy on Railway:** New Project → Deploy from GitHub repo → pick your fork.
+4. **Add a volume** to the service with mount path `/data`. Without it, your data is lost on every deploy.
+5. **Set the variables** on the service (Variables tab):
+
+   | Variable | Value |
+   |---|---|
+   | `DATA_DIR` | `/data` |
+   | `SITE_PASSWORD` | from step 2 |
+   | `SYNC_KEY` | from step 2 (only needed for the Claude routine) |
+   | `VAULT_KEY` | from step 2 (only needed for the document vault) |
+   | `TRUST_PROXY` | `1` |
+
+6. **Get your address:** Settings → Networking → Generate Domain. Open it, sign in with any username and your `SITE_PASSWORD`, and the setup wizard walks you through your profile.
+
+## Using it
+
+1. **Settings:** rent or buy, budget, rooms and size, and up to five places you travel to (work, school …) with a maximum travel time each.
+2. **About me** (needs `VAULT_KEY`): your household and work for landlords, plus documents such as payslips. Nothing is shared until you create a share link.
+3. **Add a listing:** paste a flat you found (any portal, including ImmoScout24). Flat Hunt checks it against your criteria, works out commute times and costs, and looks up the area in the background.
+4. **Track it:** shortlist, log what the landlord said, update the status. When a landlord asks for documents, tick the ones to share and send them the link.
+
+## Let Claude search for you (optional)
+
+The routine is a scheduled task in the [Claude desktop app](https://claude.ai/download). It uses **your own Chrome** through Claude in Chrome, where you are logged in to the portals and your email, so it searches and writes exactly as you would. You do not log in to Flat Hunt with Claude: the routine talks to your site with the `SYNC_KEY`, which can add listings and log replies but cannot change your settings, templates, approvals or documents.
+
+1. On Immowelt, Kleinanzeigen and WG-Gesucht, run the searches you want, logged in, and copy the result-page URLs. Narrow each search to three result pages or fewer.
+2. Install the Claude desktop app and the Claude in Chrome extension, and stay logged in to the portals and your email in Chrome.
+3. In a clone of your fork, run:
+
+   ```sh
+   ./scripts/install-routine.sh
+   ```
+
+   It asks for your site address, your `SYNC_KEY` and the search URLs, checks that the site accepts the key and prepares the routine prompt.
+4. In the Claude desktop app, create a scheduled task (for example every 3 hours during the day) and paste the prompt the script prepared.
+
+At first the routine only finds flats and logs replies. It writes to landlords only after you tick "Contacting landlords" in Settings, choose a pace and approve each message template. The switch in the page header pauses sending at any time. ImmoScout24 is never automated, because its terms forbid it. Details, safeguards and what the routine never does: [routine/README.md](routine/README.md).
+
+Check each portal's terms yourself and remove a portal's search if it objects to automated use.
+
+## Features
+
+**Tracker**
 
 - **Profile:** rent, buy or both; flat requirements; up to five important places with a travel-time limit each (car, bike or public transport); an optional radius; red-flag toggles; weights for the score; monthly net income.
 - **Listings:** add and edit by hand, delete. An address change recomputes coordinates and commute times.
 - **Commute:** car minutes via OSRM, bike minutes via the FOSSGIS bike router, public transport via Transitous, planned for the next weekday at each place's time. "Recalculate" runs in the background.
 - **Criteria check:** every listing is checked against the profile. Failing listings stay in the list, labelled with the reasons, and sort below the rest. Unknown commute times pass but are marked.
 - **Red flags:** a built-in catalogue (deposit before a viewing, payment by gift card, ID copy before any contact, and similar). You can switch entries off and add your own patterns.
-- **Scores:** a weighted score per listing. Listings get an estimated score from their data, shown with "≈"; the routine (phase 4) adds full ratings.
+- **Scores:** a weighted score per listing. Listings get an estimated score from their data, shown with "≈"; the Claude routine adds full ratings.
 - **Affordability:** rent divided by net income, or the loan payment for a purchase, compared with the share of income you set aside for housing.
 - **Purchase costs:** land-transfer tax by German state, plus 2 % for notary and land registry, plus the agent fee you enter. The rates were checked in June 2026; check again before buying.
 - **Costs panel:** monthly and one-off costs per listing, including an editable maintenance reserve for purchases.
 
-## What it does in phase 2
+**Application documents**
 
 - **Applicant profile:** household, work, what you can provide on request and a few sentences about you, with a one-page applicant summary PDF in German, English or Portuguese.
 - **Document vault:** PDF, JPEG and PNG files up to 10 MB, stored encrypted with your `VAULT_KEY`. Payslips older than three months are flagged.
@@ -28,7 +82,7 @@ Phases 1 to 4 are built: core tracker, applicant profile and document vault, are
 - **Share links, only after you approve:** you tick the documents for one landlord and get a link, valid for 7 days by default (1 to 30). You can revoke it at any time. The link is rate-limited. Every page of every document carries the watermark "Only for the application for <address> · <date>". Every document opened is logged with its time, but no IP address.
 - **Redaction helper:** cover tax ID, social-security number or bank details before you share. It works in your browser, and the covered parts are removed from the saved copy, not just hidden. Before a payslip is shared for the first time, the page reminds you to do this.
 
-## What it does in phase 3
+**Area facts**
 
 - **Everyday places:** nearest transit stop with its lines, supermarket, pharmacy, doctor, kindergarten, school, park and playground, in walking minutes (OpenStreetMap; a straight-line estimate is marked as such).
 - **Flood zones:** whether the address lies in a mapped flood area, nationwide. River and coastal floods only, no heavy rain (Starkregen). "No mapped flood area" is not "no risk".
@@ -40,7 +94,9 @@ Phases 1 to 4 are built: core tracker, applicant profile and document vault, are
 
 The facts are computed in the background on your server after a listing is added or moved, and on "Recompute". Each figure shows its source, area level, data year and retrieval date; the page footer credits all sources.
 
-## What it does in phase 4
+The facts are computed in the background on your server after a listing is added or moved, and on "Recompute". Each figure shows its source, area level, data year and retrieval date; the page footer credits all sources.
+
+**Claude routine and automatic answers**
 
 - **Routine:** searches Immowelt, Kleinanzeigen and WG-Gesucht in your own logged-in browser and adds fitting listings. ImmoScout24 is manual only.
 - **Message templates** in German and English with placeholders, a preview and approval per version; editing a template withdraws its approval. The language also sets the default language of share pages and the applicant summary PDF (`?lang=pt` still works for the summary).
@@ -50,63 +106,45 @@ The facts are computed in the background on your server after a listing is added
 - **Documents requests** are recorded; documents still leave only through a share you create.
 - **Never:** documents, share links, unapproved texts, a second message for the same slot, texts in its own words, ImmoScout24.
 
-## Run your own copy
-
-You need Node.js 18 or newer and a Railway account (or any host that runs a Node server with a persistent disk).
-
-1. Fork this repository on GitHub.
-2. In Railway, create a project from your fork. Railway reads `railway.json` for the build and start command (`npm start`) and the health check (`/healthz`).
-3. Add a volume to the service, mounted at `/data`.
-4. Set these variables on the service:
-   - `DATA_DIR=/data` — where the JSON data files are kept. Without the volume, data is lost on redeploy.
-   - `SITE_PASSWORD` — the password for the whole site. The server refuses to start without it.
-   - `SYNC_KEY` — a secret for the routine. The routine gets only this key, never the site password; with it it reaches only its own routes (listings, photos, sync, send slots and replies). It can read your profile but cannot change your settings, templates, approvals or documents. Without it those routes return 503. You can leave it unset if you do not use the routine.
-   - `VAULT_KEY` — the key for the applicant profile and document vault. Create it with `openssl rand -base64 32`, set it on the service, and keep a copy in your password manager. Without the same key the vault cannot be read. The key becomes mandatory as soon as the vault was first opened with it (the server writes a key check file on the first start with a key), even before any document is stored; after that the server will not start without the same key. To start over with a new key, stop the server and delete the empty `DATA_DIR/vault` folder. The key is never written to the volume. Without `VAULT_KEY` the profile, documents and share links are off. The server refuses `VAULT_KEY` without `SITE_PASSWORD`.
-   - `OVERPASS_URL` (optional) — your own Overpass instance instead of the public servers. The first area facts can take minutes because the public Overpass servers are often overloaded.
-   - `TRUST_PROXY=1` (optional, recommended on Railway) — Railway puts one proxy in front of the server; with this set, the share-link rate limit counts visitors instead of the proxy.
-5. Deploy, then open the Railway URL and sign in with `SITE_PASSWORD`. The setup wizard asks for your profile on first use.
-
-`/healthz` and share links (`/s/<token>`) are the only routes that do not require the password.
-
 ### What a landlord sees
 
 A share link opens a page that lists the documents you shared, and each document opens as a PDF with the watermark on every page. Nothing else of your hunt is reachable through it. The link stops working when it expires or you revoke it; after that it answers "Not found", like any unknown link. Each open is logged with its time and the document, never with an IP address, and you see the opens on the listing.
 
 The token is part of the link's path, so your host's access logs may record it. Revoke links you no longer need.
 
-To run locally without a password (for trying it out only):
+## Reference
+
+### All variables
+
+- `DATA_DIR` — where the JSON data files are kept. Point it at a persistent volume.
+- `SITE_PASSWORD` — the password for the whole site. The server refuses to start without it (unless `ALLOW_OPEN=1` for local testing).
+- `SYNC_KEY` — the routine's key. With it, only the routine's own routes are reachable (listings, photos, sync, send slots and replies); it can read your profile but cannot change settings, templates, approvals or documents. Without it those routes return 503.
+- `VAULT_KEY` — 32 random bytes in base64, for the applicant profile and document vault. Once the vault has been opened with a key, the server only starts with that same key. To start over with a new key, stop the server and delete the empty `DATA_DIR/vault` folder. Without `VAULT_KEY` the profile, documents and share links are off. The server refuses `VAULT_KEY` without `SITE_PASSWORD`.
+- `TRUST_PROXY=1` — set it behind one proxy (Railway), so the share-link rate limit counts visitors instead of the proxy.
+- `OVERPASS_URL` (optional) — your own Overpass instance instead of the public servers, which are often overloaded.
+
+`/healthz` and share links (`/s/<token>`) are the only routes that do not require the password.
+
+### Run it locally
 
 ```sh
+npm install
 ALLOW_OPEN=1 DATA_DIR=./data SYNC_KEY=dev npm start
 ```
 
-Then open http://localhost:3000. With `ALLOW_OPEN=1`, anyone who can reach the server can see and edit the hunt, and the document vault stays off.
-
-To try the document vault locally, set a password and a key:
+Then open http://localhost:3000. With `ALLOW_OPEN=1` there is no password and the document vault stays off. To try the vault, set a password and a key instead:
 
 ```sh
 SITE_PASSWORD=test DATA_DIR=./data SYNC_KEY=dev VAULT_KEY=$(openssl rand -base64 32) npm start
 ```
 
-A new key on each start cannot open the vault of the previous run: keep one key per data directory. To start over with a new key, stop the server and delete the empty `DATA_DIR/vault` folder; if it holds documents, they are lost.
+A new key on each start cannot open the vault of the previous run: keep one key per data directory.
 
-Set `SEED=1` on the first start, with no `listings.json` yet, to load example listings from a `seed.json` next to `server.js`. No seed file ships with the repository; without one the hunt starts empty.
+Set `SEED=1` on the first start, with no `listings.json` yet, to load example listings from a `seed.json` next to `server.js`. No seed file ships with the repository.
 
-To run the tests:
+Tests: `npm test`. The design is in [docs/design.md](docs/design.md). Flat Hunt builds on [Car Hunt](https://github.com/DasMehl/car-hunt).
 
-```sh
-npm test
-```
-
-## The routine
-
-Full steps in [routine/README.md](routine/README.md): save the sync key in a file, put your own searches in `searches.txt`, copy `routine/SKILL.md` into a scheduled task. Keep each saved search to 3 result pages or fewer, otherwise gone listings are never detected.
-
-To turn on sending: Settings → Contacting landlords, tick the option, choose the language, the gap and the daily cap, then approve each template. The pause switch in the header stops new sends at once; the routine re-checks it before every send, and a message already being sent can still go out.
-
-Immowelt, Kleinanzeigen and WG-Gesucht are used in your own logged-in browser at a human pace for your own search. Check each portal's terms yourself and remove a portal's search if it objects. ImmoScout24's terms forbid automated access: add its links by hand.
-
-## Area data and coverage
+### Area data and coverage
 
 | Source | Licence | Attribution |
 |---|---|---|
@@ -140,11 +178,7 @@ node scripts/area-data.js zensus   # https://www.destatis.de/static/DE/zensus/gi
 
 **Self-hosted OpenStreetMap fallback.** If the public Overpass servers stay unusable, run your own: download the state file from Geofabrik (`nordrhein-westfalen-latest.osm.pbf`, 915 MB; `germany-latest.osm.pbf`, 4.9 GB), filter it with `osmium tags-filter` to the eight place types and platforms, serve it through an own Overpass instance and set `OVERPASS_URL`. A SQLite/R-tree lookup instead of Overpass is possible later.
 
-## Coming next
-
-Nothing planned beyond phase 4; see the issues for ideas.
-
-## Data and services
+### Data and services
 
 Flat Hunt uses free public services and does not run its own scrapers:
 

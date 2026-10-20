@@ -34,7 +34,7 @@ test("noiseAt in NRW asks all five layers in turn and reports the loudest source
   const f = async url => { urls.push(url); return reply(url.includes("STR_DEN") ? '<FIELDS Classify.PixelValue="70111000"/>' : url.includes("SCS_DEN") ? '<FIELDS Classify.PixelValue="60000000"/>' : '<FIELDS Classify.PixelValue="NoData"/>'); };
   const r = await N.noiseAt(KOE, "05111", f, noWait);
   assert.equal(urls.length, 5);
-  assert.deepEqual(r, { state: "NW", source: "nrw-noise", lden: { road: 70, rail: null, tram: 60, air: null, industry: null }, max: 70, band: "70–74", dominant: "road" });
+  assert.deepEqual(r, { state: "NW", source: "nrw-noise", uncovered: [], lden: { road: 70, rail: null, tram: 60, air: null, industry: null }, max: 70, band: "70–74", dominant: "road" });
 });
 
 test("noiseAt in Berlin uses the Berlin layers; nothing mapped gives max null", async () => {
@@ -113,4 +113,12 @@ test("parseBerlin: the live lowest class \"bis 55 dB(A)\" is readable and gives 
   assert.equal(N.parseBerlin(f("bis 55 dB(A)")), null);
   assert.equal(N.parseBerlin(f("ab 64 - 69 dB(A)")), 64);
   assert.equal(N.parseBerlin({ features: [f("bis 55 dB(A)").features[0], f("ab 75 dB(A)").features[0]] }), 75);
+});
+
+test("Berlin does not cover federal railways; the figure carries that, NRW covers all kinds", async () => {
+  const be = await N.noiseAt(MITTE, "11000", async () => reply({ features: [] }), noWait);
+  assert.deepEqual(be.uncovered, ["rail"]);
+  assert.ok(!be.lden || !("rail" in be.lden), "no rail layer is asked in Berlin");
+  const nw = await N.noiseAt(KOE, "05111", async () => reply('<FIELDS Classify.PixelValue="NoData"/>'), noWait);
+  assert.deepEqual(nw.uncovered, []);
 });

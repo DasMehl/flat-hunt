@@ -30,7 +30,8 @@
       declined: "Declined. Nothing was sent; answer the landlord yourself if you like.", cancelled: "Cancelled: the landlord withdrew.",
       me: "Me (routine)", templateTag: (name, v, lang) => `Template: ${name} · v${v} · ${lang.toUpperCase()}`,
       intents: { "viewing-invite": "Viewing invitation", "documents-request": "Documents request", rejection: "Rejection", question: "Question", other: "Other" },
-      upSent: "Message sent", upReply: "Reply", upSkipped: "Skipped (already in contact)", viewingBadge: "Viewing to confirm"
+      upSent: "Message sent", upReply: "Reply", upSkipped: "Skipped (already in contact)", viewingBadge: "Viewing to confirm",
+      claimOpen: "The confirmation is being sent right now. Try again in a minute."
     },
     de: {
       locale: "de-DE",
@@ -56,7 +57,8 @@
       declined: "Abgelehnt. Es wurde nichts gesendet; antworte dem Vermieter bei Bedarf selbst.", cancelled: "Abgesagt: Der Vermieter hat zurückgezogen.",
       me: "Ich (Routine)", templateTag: (name, v, lang) => `Vorlage: ${name} · V${v} · ${lang.toUpperCase()}`,
       intents: { "viewing-invite": "Besichtigungseinladung", "documents-request": "Unterlagenanfrage", rejection: "Absage", question: "Frage", other: "Sonstiges" },
-      upSent: "Nachricht gesendet", upReply: "Antwort", upSkipped: "Übersprungen (schon in Kontakt)", viewingBadge: "Termin bestätigen"
+      upSent: "Nachricht gesendet", upReply: "Antwort", upSkipped: "Übersprungen (schon in Kontakt)", viewingBadge: "Termin bestätigen",
+      claimOpen: "Die Bestätigung wird gerade gesendet. Versuche es in einer Minute noch einmal."
     },
     pt: {
       locale: "pt-BR",
@@ -82,7 +84,8 @@
       declined: "Recusado. Nada foi enviado; responda ao proprietário se quiser.", cancelled: "Cancelado: o proprietário desistiu.",
       me: "Eu (rotina)", templateTag: (name, v, lang) => `Modelo: ${name} · v${v} · ${lang.toUpperCase()}`,
       intents: { "viewing-invite": "Convite para visita", "documents-request": "Pedido de documentos", rejection: "Recusa", question: "Pergunta", other: "Outro" },
-      upSent: "Mensagem enviada", upReply: "Resposta", upSkipped: "Ignorado (já em contato)", viewingBadge: "Confirmar visita"
+      upSent: "Mensagem enviada", upReply: "Resposta", upSkipped: "Ignorado (já em contato)", viewingBadge: "Confirmar visita",
+      claimOpen: "A confirmação está sendo enviada agora. Tente novamente em um minuto."
     }
   };
 
@@ -114,7 +117,26 @@
     return t.cancelled;
   }
 
-  const shared = { TEMPLATE_IDS, TEMPLATE_LANGS, INTENTS, L, fmtTime, switchState, messageTag, viewingText };
+  // Newest proposal first.
+  const sortViewings = list => [...(list || [])].sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""));
+  // The text under a failed viewing request: a held confirmation claim and a dead connection get their own words, else the server's error.
+  function viewingError(r, lang) {
+    const t = L[lang] || L.en;
+    if (r.status === 0) return t.netFail;
+    const j = r.json || {};
+    if (j.reason === "claim-open") return t.claimOpen;
+    return j.error ? String(j.error) : `${t.failed} (${r.status})`;
+  }
+  // Update-log entry of the outreach routine: the tag text and the muted note after the link; null for the older types.
+  function updateParts(e, lang) {
+    const t = L[lang] || L.en;
+    if (e.type === "sent") return { label: t.upSent, note: t.names[e.template] || "" };
+    if (e.type === "skipped") return { label: t.upSkipped, note: t.names[e.template] || "" };
+    if (e.type === "reply") return { label: t.upReply, note: t.intents[e.intent] || "" };
+    return null;
+  }
+
+  const shared = { TEMPLATE_IDS, TEMPLATE_LANGS, INTENTS, L, fmtTime, switchState, messageTag, viewingText, sortViewings, viewingError, updateParts };
   if (typeof window === "undefined") { module.exports = shared; return; }
   // ---------- page ----------
   const el = (tag, attrs = {}, ...kids) => {
@@ -270,6 +292,54 @@
     };
   }
 
-  // viewings(host, listing, { lang, onChanged }) is added by Task 8.
-  window.OutreachUI = { ...shared, mountTemplates, headerSwitch };
+  // Errors of failed viewing requests survive the reload that follows them: shown once when the block is drawn again.
+  const viewingErrors = new Map();
+
+  // The viewing proposals of one listing: pick a time and confirm, or decline. After a request the page reloads (onChanged).
+  function viewings(host, listing, { lang, onChanged }) {
+    const t = L[lang] || L.en;
+    const items = sortViewings(listing.viewings);
+    host.hidden = !items.length;
+    if (!items.length) { host.replaceChildren(); return; }
+    const card = v => {
+      const err = el("p", { class: "err vw-err", role: "alert", text: viewingErrors.get(v.id) || "" });
+      viewingErrors.delete(v.id);
+      const btns = el("div", { class: "vu-btns" });
+      const sendReq = async (action, body) => {
+        const all = [...btns.querySelectorAll("button")];
+        all.forEach(b => { b.disabled = true; });
+        err.textContent = "";
+        const r = await api("POST", `/api/listings/${encodeURIComponent(listing.id)}/viewings/${encodeURIComponent(v.id)}/${action}`, body);
+        if (r.ok) { onChanged && onChanged(); return; }
+        const msg = viewingError(r, lang);
+        err.textContent = msg;
+        if (r.status !== 0 && onChanged) { viewingErrors.set(v.id, msg); onChanged(); } // reload to show what the server holds now
+        else all.forEach(b => { b.disabled = false; });
+      };
+      const decline = () => el("button", { type: "button", class: "vu-btn danger", text: t.decline, onclick: () => sendReq("decline") });
+      const root = el("div", { class: "vw-item " + v.status });
+      if (v.status === "pending" && v.proposedTimes.length) {
+        const name = "vw-" + v.id;
+        let picked = null;
+        const ok = el("button", { type: "button", class: "vu-btn primary", text: t.confirmTime, disabled: true, onclick: () => sendReq("confirm", { time: picked }) });
+        const set = el("fieldset", { class: "vw-times" }, el("legend", { text: t.pickTime }),
+          v.proposedTimes.map(time => el("label", { class: "vw-time" },
+            el("input", { type: "radio", name, value: time, onchange: () => { picked = time; ok.disabled = false; } }),
+            el("span", { text: fmtTime(time, lang) }))));
+        btns.append(ok, decline());
+        root.append(el("p", { class: "vw-line", text: t.proposed }), set, btns, err);
+      } else if (v.status === "pending") {
+        btns.append(decline());
+        root.append(el("p", { class: "vw-line", text: t.noTimes }), btns, err);
+      } else {
+        root.append(el("p", { class: "vw-line", text: viewingText(v, lang) }));
+        if (v.status === "confirmed" && !v.confirmationSentAt) { btns.append(decline()); root.append(btns); }
+        root.append(err);
+      }
+      return root;
+    };
+    host.replaceChildren(el("h4", { class: "vw-h", text: t.viewingsH }), ...items.map(card));
+  }
+
+  window.OutreachUI = { ...shared, mountTemplates, headerSwitch, viewings };
 })();

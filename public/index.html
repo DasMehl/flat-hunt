@@ -136,6 +136,7 @@ aside select { width: 100%; background: var(--surface); border: 1px solid var(--
 .tag.new { background: var(--good-bg); color: var(--good); }
 .tag.price { background: var(--info-bg); color: var(--info); }
 .tag.gone { background: var(--bad-bg); color: var(--bad); }
+.tag.sent, .tag.reply, .tag.skipped { background: var(--info-bg); color: var(--info); }
 .tag.back { background: var(--warn-bg); color: var(--warn); }
 .tag.out{background:var(--warn);color:#fff}.tag.flag{background:var(--bad);color:#fff;cursor:help}.crit.flags{border-left-color:var(--bad)}.crit.flags li{margin-bottom:3px}.crit{border-left:3px solid var(--warn);padding:6px 10px;margin:0 0 10px}.crit ul{margin:4px 0 0 18px}
 
@@ -250,6 +251,16 @@ details.q ol { margin: 6px 0 0; padding-left: 18px; font-size: 13.5px; color: va
 .msg.in { border-left: 3px solid var(--warn); } .msg.out { border-left: 3px solid var(--line); color: var(--muted); }
 .msg .meta { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--muted); margin-bottom: 3px; } .msg .meta b { color: var(--fg); }
 .msg .text { white-space: pre-wrap; }
+.viewings { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; display: grid; gap: 10px; background: var(--surface); }
+.viewings .vw-h { margin: 0; font-size: 12.5px; color: var(--muted); font-weight: 600; }
+.vw-item { display: grid; gap: 8px; min-width: 0; } .vw-item + .vw-item { border-top: 1px solid var(--line); padding-top: 10px; }
+.vw-line { margin: 0; font-size: 13.5px; overflow-wrap: anywhere; } .vw-item.declined .vw-line, .vw-item.cancelled .vw-line { color: var(--muted); }
+.vw-times { border: 0; padding: 0; margin: 0; min-width: 0; display: flex; flex-wrap: wrap; gap: 6px 12px; } .vw-times legend { font-size: 12.5px; color: var(--muted); padding: 0; margin-bottom: 4px; }
+.vw-time { display: inline-flex; align-items: center; gap: 6px; font-size: 13.5px; min-height: 32px; } .vw-time input { margin: 0; }
+.viewings .vu-btn { height: 36px; padding: 0 14px; font-size: 13.5px; }
+.viewings .err { color: var(--bad); font-size: 13px; margin: 0; } .viewings .err:empty { display: none; }
+.msg .meta .tag.mtag { margin-left: 4px; font-size: 11px; background: var(--surface-2); color: var(--muted); } .msg .meta .tag.mtag.back { background: var(--warn-bg); color: var(--warn); }
+.msg .meta > span:first-child { min-width: 0; overflow-wrap: anywhere; }
 .empty { color: var(--muted); font-size: 13.5px; font-style: italic; }
 .controls { display: grid; gap: 8px; margin-top: 12px; }
 .controls label { font-size: 12px; font-weight: 500; color: var(--muted); display: block; margin-bottom: 3px; }
@@ -1118,7 +1129,7 @@ footer.sources a { color: inherit; }
     const u = $("#updates"); const log = (meta.log || []).slice(0, 8);
     u.hidden = !log.length; if (!log.length) return;
     u.innerHTML = ""; u.append(el("h3", null, T.updates)); const ul = el("ul");
-    log.forEach(e => { const li = el("li"); const tag = el("span", "tag " + e.type, { new: T.upNew, price: T.upPrice, gone: T.upGone, back: T.upBack }[e.type] || e.type); const a = el("a", null, e.text || e.id); a.href = "#listing-" + e.id; a.onclick = ev => { ev.preventDefault(); openListing(e.id); }; li.append(el("span", "d", fmtDate(e.date)), tag, a); if (e.type === "price") li.append(el("span", "muted", eur(e.from) + " → " + eur(e.to))); if (e.type === "new" && e.price != null) li.append(el("span", "muted", eur(e.price))); ul.append(li); });
+    log.forEach(e => { const li = el("li"); const up = OutreachUI.updateParts(e, lang); const tag = el("span", "tag " + e.type, up ? up.label : { new: T.upNew, price: T.upPrice, gone: T.upGone, back: T.upBack }[e.type] || e.type); const a = el("a", null, e.text || e.id); a.href = "#listing-" + e.id; a.onclick = ev => { ev.preventDefault(); openListing(e.id); }; li.append(el("span", "d", fmtDate(e.date)), tag, a); if (e.type === "price") li.append(el("span", "muted", eur(e.from) + " → " + eur(e.to) + (e.field === "coldRent" ? " " + T.cold : ""))); if (up && up.note) li.append(el("span", "muted", up.note)); if (e.type === "new" && e.price != null) li.append(el("span", "muted", eur(e.price))); ul.append(li); });
     u.append(ul);
   }
 
@@ -1172,6 +1183,7 @@ footer.sources a { color: inherit; }
       facts.append(el("span", "fact price " + priceCls(c), w != null ? `${eur(w)} ${T.warm}` : known(c.coldRent) ? `${eur(c.coldRent)} ${T.cold}` : T.noPrice));
       if (w != null && known(c.coldRent)) facts.append(el("span", "fact", `${eur(c.coldRent)} ${T.cold}`));
     }
+    if ((c.viewings || []).some(v => v.status === "pending" && v.proposedTimes.length)) { const vb = el("span", "fact warn", OutreachUI.L[lang].viewingBadge); facts.append(vb); }
     if (known(c.rooms)) facts.append(el("span", "fact", T.rooms(nf(c.rooms, 1))));
     if (c.size) facts.append(el("span", "fact", sqm(c.size)));
     const pps = Criteria.pricePerSqm(c); if (pps != null) facts.append(el("span", "fact", eurSqm(pps)));
@@ -1275,8 +1287,9 @@ footer.sources a { color: inherit; }
     const right = el("div", "col"); right.append(el("h3", null, T.conv));
     const tl = el("div", "timeline"); const msgs = [...(c.messages || [])].sort((a, b) => (a.date || "").localeCompare(b.date || ""));
     if (!msgs.length) tl.append(el("p", "empty", T.noMsgs));
-    msgs.forEach(m => { const g = m.i18n && m.i18n[lang]; const text = !g ? m.text : (m.dir === "in" ? m.text + "\n\n(" + g + ")" : g); const mm = el("div", "msg " + (m.dir === "in" ? "in" : "out")); const meta = el("div", "meta"); const who = el("span"); who.append(el("b", null, m.from || ""), document.createTextNode(m.via ? " · " + m.via : "")); meta.append(who, el("span", null, fmtDate(m.date))); mm.append(meta, el("div", "text", text)); tl.append(mm); });
+    msgs.forEach(m => { const g = m.i18n && m.i18n[lang]; const text = !g ? m.text : (m.dir === "in" ? m.text + "\n\n(" + g + ")" : g); const mm = el("div", "msg " + (m.dir === "in" ? "in" : "out")); const meta = el("div", "meta"); const who = el("span"); who.append(el("b", null, m.from || (m.dir === "out" ? OutreachUI.L[lang].me : "")), document.createTextNode(m.via ? " · " + m.via : "")); const mtag = OutreachUI.messageTag(m, lang); if (mtag) who.append(document.createTextNode(" "), el("span", "tag mtag" + (m.dir === "in" && m.intent === "rejection" ? " back" : ""), mtag)); meta.append(who, el("span", null, fmtDate(m.date))); mm.append(meta, el("div", "text", text)); tl.append(mm); });
     right.append(tl);
+    const vw = el("section", "viewings"); OutreachUI.viewings(vw, c, { lang, onChanged: () => { expanded.add(c.id); load(); } }); if (!vw.hidden) right.insertBefore(vw, tl);
     const note = el("div", "saved");
     const ctr = el("div", "controls"); const r2 = el("div", "row2");
     const sW = el("div"); const sl = el("label", null, T.statusL); sl.htmlFor = "status-" + c.id; const ss = el("select"); ss.id = "status-" + c.id; STATUSES.forEach(k => { const o = el("option", null, T.status[k]); o.value = k; o.selected = k === c.status; ss.append(o); }); ss.onchange = () => save(c.id, { status: ss.value }, note); sW.append(sl, ss);
@@ -1421,7 +1434,7 @@ footer.sources a { color: inherit; }
   }
   async function refresh() {
     sendSwitch();
-    if (document.activeElement && document.activeElement.closest(".controls, .docs, aside.filters, dialog")) return;
+    if (document.activeElement && document.activeElement.closest(".controls, .docs, .viewings, aside.filters, dialog")) return;
     try { const [r1, r2, q] = await Promise.all([fetch("/api/listings", { cache: "no-store" }), fetch("/api/meta", { cache: "no-store" }), fetchAreaQueue()]); setAreaQueue(q); if (r1.ok) { raw = (await r1.json()).listings || {}; listings = toList(raw); if (r2.ok) meta = await r2.json(); render(); } } catch (e) {}
   }
   document.addEventListener("visibilitychange", () => { if (!document.hidden) sendSwitch(); });

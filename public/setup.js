@@ -36,7 +36,9 @@
       weights: "How much each part counts in the score", weightHint: "0 = ignore this part", weightsZero: "Please give at least one part a weight above 0.",
       w: { price: "Price", size: "Size", commute: "Commute", area: "Area", condition: "Condition", contact: "Landlord / contact" },
       outreach: "Let the Claude routine contact shortlisted landlords in my name", paused: "Paused for now", outLang: "Message language",
-      outreachHint: "The website never sends messages. Message templates and automatic answers arrive in a later version; until then nothing is sent.",
+      outreachHint: "The website never sends messages itself. Your Claude routine sends only templates you approved below, at most the number per day you set, with the minimum gap between messages, never twice to the same listing, and never documents. The pause switch in the page header stops it at once.",
+      minGapMin: "Minimum minutes between two messages", dailyCap: "Messages per day at most",
+      templatesLater: "You edit and approve the message templates in Settings once the hunt is set up; nothing is sent before.", templatesSaveAtOnce: "Template buttons save at once; “Save” below stores the other settings.", pausedTip: "Change this with the pause switch in the page header.",
       lang: { en: "English", de: "Deutsch", pt: "Português" },
       needNumber: "Please enter a valid number for:", netFail: "Could not reach the server:", loadFail: "Could not load the red-flag list; you can still save.",
       notBelow: (a, b) => `“${a}” must not be below “${b}”.`,
@@ -78,7 +80,9 @@
       weights: "Wie stark jeder Teil in die Punkte eingeht", weightHint: "0 = diesen Teil nicht werten", weightsZero: "Bitte mindestens einem Teil ein Gewicht über 0 geben.",
       w: { price: "Preis", size: "Fläche", commute: "Wege", area: "Umgebung", condition: "Zustand", contact: "Vermieter / Kontakt" },
       outreach: "Die Claude-Routine darf vorgemerkte Vermieter in meinem Namen anschreiben", paused: "Vorerst pausiert", outLang: "Sprache der Nachrichten",
-      outreachHint: "Die Website verschickt nie Nachrichten. Vorlagen und automatische Antworten kommen in einer späteren Version; bis dahin wird nichts verschickt.",
+      outreachHint: "Die Website verschickt selbst nie Nachrichten. Deine Claude-Routine verschickt nur Vorlagen, die du unten freigegeben hast, höchstens so viele pro Tag wie eingestellt, mit dem Mindestabstand zwischen zwei Nachrichten, nie zweimal an dieselbe Anzeige und nie Unterlagen. Der Pausenschalter oben auf der Seite stoppt sie sofort.",
+      minGapMin: "Mindestabstand zwischen zwei Nachrichten (Minuten)", dailyCap: "Höchstens so viele Nachrichten pro Tag",
+      templatesLater: "Die Nachrichtenvorlagen bearbeitest du in den Einstellungen und gibst sie dort frei, sobald die Suche eingerichtet ist; vorher wird nichts verschickt.", templatesSaveAtOnce: "Die Knöpfe der Vorlagen speichern sofort; „Speichern“ unten speichert die übrigen Einstellungen.", pausedTip: "Das änderst du mit dem Pausenschalter oben auf der Seite.",
       lang: { en: "English", de: "Deutsch", pt: "Português" },
       needNumber: "Bitte eine gültige Zahl eingeben für:", netFail: "Server nicht erreichbar:", loadFail: "Die Liste der Warnzeichen konnte nicht geladen werden; Speichern geht trotzdem.",
       notBelow: (a, b) => `„${a}“ darf nicht unter „${b}“ liegen.`,
@@ -120,7 +124,9 @@
       weights: "Quanto cada parte conta na pontuação", weightHint: "0 = ignorar esta parte", weightsZero: "Dê a pelo menos uma parte um peso acima de 0.",
       w: { price: "Preço", size: "Área", commute: "Trajeto", area: "Região", condition: "Estado", contact: "Proprietário / contato" },
       outreach: "Permitir que a rotina do Claude contate em meu nome os proprietários salvos", paused: "Pausado por enquanto", outLang: "Idioma das mensagens",
-      outreachHint: "O site nunca envia mensagens. Modelos e respostas automáticas chegam numa versão futura; até lá nada é enviado.",
+      outreachHint: "O site nunca envia mensagens sozinho. Sua rotina do Claude envia só modelos que você aprovou abaixo, no máximo a quantidade por dia definida, com o intervalo mínimo entre mensagens, nunca duas vezes para o mesmo anúncio e nunca documentos. O botão de pausa no topo da página a interrompe na hora.",
+      minGapMin: "Intervalo mínimo entre duas mensagens (minutos)", dailyCap: "Mensagens por dia, no máximo",
+      templatesLater: "Você edita e aprova os modelos de mensagem nas Configurações depois de configurar a busca; antes disso nada é enviado.", templatesSaveAtOnce: "Os botões dos modelos salvam na hora; “Salvar” abaixo guarda as demais configurações.", pausedTip: "Mude isso com o botão de pausa no topo da página.",
       lang: { en: "English", de: "Deutsch", pt: "Português" },
       needNumber: "Informe um número válido para:", netFail: "Não foi possível falar com o servidor:", loadFail: "Não foi possível carregar a lista de sinais de alerta; ainda dá para salvar.",
       notBelow: (a, b) => `“${a}” não pode ficar abaixo de “${b}”.`,
@@ -353,7 +359,23 @@
     }];
   }
 
-  function steps(t, p, catalogue, lang) {
+  // The pause state is owned by the switch in the page header (PUT /api/outreach/pause); here it is shown, not edited.
+  function pausedField(t, p) {
+    const i = el("input", { type: "checkbox", disabled: true }); i.checked = !!p.outreach.paused;
+    return [el("div", { class: "opts" }, el("label", { title: t.pausedTip }, i, t.paused)), () => {}];
+  }
+  // Wizard: a note only. Settings: the template editor, mounted once per opened dialog (the fourth element runs after every render).
+  function templatesField(t, mode, lang) {
+    if (mode !== "settings") return hint(t.templatesLater);
+    const box = el("div", { class: "tpl" });
+    let mounted = false;
+    return [el("div", { class: "tplwrap" }, el("p", { class: "hint", text: t.templatesSaveAtOnce }), box), () => {}, null, () => {
+      if (mounted || !window.OutreachUI) return;
+      mounted = true; window.OutreachUI.mountTemplates(box, { lang });
+    }];
+  }
+
+  function steps(t, p, catalogue, lang, mode) {
     const notBelow = (hi, lo, a, b) => p.flat[hi] != null && p.flat[lo] != null && p.flat[hi] < p.flat[lo] ? { err: t.notBelow(t[a], t[b]) } : null;
     return [
       [text(t, p, "name", "name"), multi(t, p, "languages", "languages", LANGS, t.lang, t.needLang),
@@ -376,7 +398,11 @@
         rule(() => [notBelow("roomsMax", "roomsMin", "roomsMax", "roomsMin"), notBelow("sizeMax", "sizeMin", "sizeMax", "sizeMin"), notBelow("floorMax", "floorMin", "floorMax", "floorMin"), notBelow("moveInTo", "moveInFrom", "moveInTo", "moveInFrom")])],
       [placesField(t, p), radiusField(t, p)],
       [redFlagsField(t, p, catalogue, lang), weightsField(t, p)],
-      [reveal(check(t, p, "outreach.enabled", "outreach"), [check(t, p, "outreach.paused", "paused"), select(t, p, "outreach.language", "outLang", ["de", "en"], t.lang)]), hint(t.outreachHint)]
+      [reveal(check(t, p, "outreach.enabled", "outreach"), [
+        pausedField(t, p),
+        select(t, p, "outreach.language", "outLang", ["de", "en"], t.lang),
+        group(number(t, p, "outreach.minGapMin", "minGapMin", { min: 5, max: 1440, whole: true }), number(t, p, "outreach.dailyCap", "dailyCap", { min: 1, max: 50, whole: true }))]),
+        hint(t.outreachHint), templatesField(t, mode, lang)]
     ];
   }
 
@@ -387,7 +413,7 @@
     catch (e) { catalogue = []; loadFail = true; }
     let p = mode === "settings" && window.FlatHunt ? structuredClone(window.FlatHunt.profile()) : defaultProfile();
     if (mode === "wizard") p.redFlags = catalogue.map(d => ({ id: d.id, on: d.default }));
-    const all = steps(t, p, catalogue, lang);
+    const all = steps(t, p, catalogue, lang, mode);
     const err = el("p", { class: "err", role: "alert" });
     const dlg = el("dialog", { class: "sx" + (mode === "wizard" ? " wiz" : "") });
     const form = el("form", { method: "dialog", novalidate: true });

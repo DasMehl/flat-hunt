@@ -394,6 +394,23 @@ dialog.sx.ld-warn { max-width: 520px; }
 .vu-badge.muted { color: var(--muted); cursor: help; }
 .vu-badge.good { background: var(--good-bg); color: var(--good); } .vu-badge.warn { background: var(--warn-bg); color: var(--warn); cursor: help; }
 #aboutbtn[aria-pressed="true"] { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+/* Contacting landlords: the header pause switch and the template editor in Settings (public/outreach-ui.js). */
+.sendsw .sh { display: none; }
+.sendsw.on { border-color: var(--good); color: var(--fg); } .sendsw.on .dot { color: var(--good); opacity: 1; }
+.sendsw.paused { background: var(--warn); border-color: var(--warn); color: #1b1305; font-weight: 700; } .sendsw.paused .dot { border-radius: 1px; opacity: 1; }
+@media (max-width: 700px) { .sendsw .lg { display: none; } .sendsw .sh { display: inline; } }
+.sendsw:disabled { opacity: .6; cursor: progress; }
+.sx .tpl-list { display: grid; gap: 14px; margin-top: 8px; } .sx .tpl-h { margin: 6px 0 0; font-size: 16px; }
+.sx .tpl-card { border: 1px solid var(--line); border-radius: 9px; padding: 12px; display: grid; gap: 8px; min-width: 0; }
+.sx .tpl-card h5 { margin: 0; font-size: 15px; }
+.sx .tpl-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; }
+.sx .tpl-tabs, .sx .tpl-tokens, .sx .tpl-acts { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.sx .tpl-chip { font-size: 12.5px; font-weight: 600; padding: 3px 10px; border-radius: 999px; } .sx .tpl-chip.good { background: var(--good-bg); color: var(--good); } .sx .tpl-chip.warn { background: var(--warn-bg); color: var(--warn); }
+.sx .tpl-card textarea { width: 100%; box-sizing: border-box; font: inherit; font-size: 14px; line-height: 1.45; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--fg); resize: vertical; }
+.sx .tpl-err:empty, .sx .tpl-out:empty { display: none; } .sx .tpl-err div { margin: 0; }
+.sx .tpl-preview { margin: 0; padding: 10px; background: var(--surface-2); border-radius: 8px; white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; font-size: 13.5px; }
+.sx .tpl-warn { color: var(--warn); font-size: 13px; font-weight: 600; margin: 6px 0 0; }
+.sx .tpl-acts .vu-btn { height: 36px; padding: 0 14px; font-size: 13.5px; }
 [hidden] { display: none !important; }
 /* Dialogs (wizard, Settings, Add a listing): pinned near the top, scrolling body, button bar always at the bottom. */
 dialog.sx { border: 1px solid var(--line); border-radius: var(--radius); padding: 0; margin: 6vh auto auto; max-width: 720px; width: calc(100% - 32px); max-height: 88vh; background: var(--surface); color: var(--fg); box-shadow: 0 12px 40px rgba(16, 24, 40, .18); overflow: hidden; }
@@ -500,6 +517,7 @@ footer.sources a { color: inherit; }
       <div class="sub" id="sub"></div>
     </div>
     <div class="hright">
+      <button class="chip sendsw" id="sendsw" type="button" role="switch" hidden></button>
       <button class="chip" id="addlisting" type="button"></button>
       <button class="chip" id="settings" type="button"></button>
       <button class="chip" id="aboutbtn" type="button" aria-controls="aboutme" aria-pressed="false"></button>
@@ -545,6 +563,7 @@ footer.sources a { color: inherit; }
 <script src="criteria.js"></script>
 <script src="area-sources.js"></script>
 <script src="area-ui.js"></script>
+<script src="outreach-ui.js"></script>
 <script src="setup.js"></script>
 <script src="vault-ui.js"></script>
 <script src="imagepdf.js"></script>
@@ -1315,7 +1334,7 @@ footer.sources a { color: inherit; }
     renderKpis(list); renderDecision(list); renderMap(list); renderChart(list); renderUpdates(); renderCosts(list); renderList(list); renderTable();
     $("#compare").hidden = !costSelected.some(id => listings.some(c => c.id === id));
   }
-  document.querySelectorAll(".lang button").forEach(b => b.onclick = () => { lang = b.dataset.lang; try { localStorage.setItem("flathunt-lang", lang); } catch (e) {} if (P) render(); });
+  document.querySelectorAll(".lang button").forEach(b => b.onclick = () => { lang = b.dataset.lang; try { localStorage.setItem("flathunt-lang", lang); } catch (e) {} if (P) { render(); sendSwitch(); } });
 
   // ---------- saving ----------
   let saving = Promise.resolve();
@@ -1383,12 +1402,22 @@ footer.sources a { color: inherit; }
       if (!r1.ok) throw new Error(r1.status);
       setAreaQueue(q);
       raw = (await r1.json()).listings || {}; listings = toList(raw); if (r2.ok) meta = await r2.json();
-      render();
+      render(); sendSwitch();
       if (location.hash.startsWith("#listing-")) { const t = document.getElementById(location.hash.slice(1)); if (t) t.scrollIntoView({ block: "start" }); }
       if (!window.__flathuntRefresh) window.__flathuntRefresh = setInterval(refresh, 60000);
     } catch (e) { console.warn(e); $("#cards").hidden = false; $("#cards").innerHTML = ""; $("#cards").append(el("p", "empty", T.loadFail)); }
   }
+  // The header pause switch: status of the outreach routine; a 404 or an error hides it.
+  async function sendSwitch() {
+    const host = $("#sendsw");
+    try {
+      const r = await fetch("/api/outreach/status", { cache: "no-store" });
+      if (!r.ok) throw new Error(r.status);
+      OutreachUI.headerSwitch(host, { lang, status: await r.json(), onChanged: () => load() });
+    } catch (e) { host.hidden = true; }
+  }
   async function refresh() {
+    sendSwitch();
     if (document.activeElement && document.activeElement.closest(".controls, .docs, aside.filters, dialog")) return;
     try { const [r1, r2, q] = await Promise.all([fetch("/api/listings", { cache: "no-store" }), fetch("/api/meta", { cache: "no-store" }), fetchAreaQueue()]); setAreaQueue(q); if (r1.ok) { raw = (await r1.json()).listings || {}; listings = toList(raw); if (r2.ok) meta = await r2.json(); render(); } } catch (e) {}
   }
